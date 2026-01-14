@@ -112,31 +112,142 @@ def not_found_xml():
 
 
 def generate_sofia_conf_xml():
-    """Generate sofia.conf.xml with dynamic gateways"""
+    # Build gateway XML
     gateway_xml = ""
     for gw_name, gw_data in GATEWAYS.items():
         gateway_xml += f"""
-        <gateway name="{gw_name}">
-          <param name="username" value="{gw_data['username']}"/>
-          <param name="password" value="{gw_data['password']}"/>
-          <param name="realm" value="{gw_data['realm']}"/>
-          <param name="proxy" value="{gw_data['proxy']}"/>
-          <param name="register" value="{gw_data.get('register', 'true')}"/>
-          <param name="caller-id-in-from" value="{gw_data.get('caller_id_in_from', 'true')}"/>
-        </gateway>"""
+          <gateway name="{gw_name}">
+            <param name="username" value="{gw_data['username']}"/>
+            <param name="password" value="{gw_data['password']}"/>
+            <param name="realm" value="{gw_data['realm']}"/>
+            <param name="proxy" value="{gw_data['proxy']}"/>
+            <param name="register" value="{gw_data.get('register', 'true')}"/>
+            <param name="caller-id-in-from" value="{gw_data.get('caller_id_in_from', 'true')}"/>
+          </gateway>"""
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <document type="freeswitch/xml">
   <section name="configuration">
-    <configuration name="sofia.conf" description="sofia Configuration">
+    <configuration name="sofia.conf" description="sofia Endpoint">
       <global_settings>
         <param name="log-level" value="0"/>
+        <param name="debug-presence" value="0"/>
       </global_settings>
+      
       <profiles>
+        <!-- INTERNAL PROFILE - for phone registrations -->
+        <profile name="internal">
+          <aliases></aliases>
+          <gateways></gateways>
+          <domains>
+            <domain name="all" alias="true" parse="false"/>
+          </domains>
+          <settings>
+            <param name="debug" value="0"/>
+            <param name="sip-trace" value="no"/>
+            <param name="sip-capture" value="no"/>
+            <param name="watchdog-enabled" value="no"/>
+            <param name="watchdog-step-timeout" value="30000"/>
+            <param name="watchdog-event-timeout" value="30000"/>
+            <param name="log-auth-failures" value="false"/>
+            <param name="forward-unsolicited-mwi-notify" value="false"/>
+            <param name="context" value="public"/>
+            <param name="rfc2833-pt" value="101"/>
+            <param name="sip-port" value="5060"/>
+            <param name="dialplan" value="XML"/>
+            <param name="dtmf-duration" value="2000"/>
+            <param name="inbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
+            <param name="outbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
+            <param name="rtp-timer-name" value="soft"/>
+            <param name="rtp-ip" value="auto"/>
+            <param name="sip-ip" value="auto"/>
+            <param name="hold-music" value="local_stream://moh"/>
+            <param name="apply-nat-acl" value="nat.auto"/>
+            <param name="apply-inbound-acl" value="domains"/>
+            <param name="local-network-acl" value="localnet.auto"/>
+            <param name="inbound-codec-negotiation" value="generous"/>
+            <param name="nonce-ttl" value="60"/>
+            <param name="auth-calls" value="true"/>
+            <param name="auth-subscriptions" value="true"/>
+            <param name="inbound-reg-force-matching-username" value="true"/>
+            <param name="auth-all-packets" value="false"/>
+            <param name="ext-rtp-ip" value="stun:stun.freeswitch.org"/>
+            <param name="ext-sip-ip" value="stun:stun.freeswitch.org"/>
+            <param name="NDLB-force-rport" value="true"/>
+            <param name="NDLB-received-in-nat-reg-contact" value="true"/>
+            <param name="enable-rport" value="true"/>
+            <param name="aggressive-nat-detection" value="true"/>
+            <param name="apply-nat-acl" value="rfc1918.auto"/>
+            <param name="rtp-timeout-sec" value="300"/>
+            <param name="rtp-hold-timeout-sec" value="1800"/>
+            <param name="manage-presence" value="true"/>
+            <param name="presence-hosts" value="auto"/>
+            <param name="presence-privacy" value="false"/>
+            <param name="inbound-late-negotiation" value="true"/>
+            <param name="tls" value="false"/>
+            <param name="tls-only" value="false"/>
+            <param name="tls-bind-params" value="transport=tls"/>
+            <param name="tls-sip-port" value="5061"/>
+            <param name="tls-passphrase" value=""/>
+            <param name="tls-verify-date" value="true"/>
+            <param name="tls-verify-policy" value="none"/>
+            <param name="tls-verify-depth" value="2"/>
+            <param name="tls-verify-in-subjects" value=""/>
+            <param name="tls-version" value="tlsv1,tlsv1.1,tlsv1.2"/>
+            <param name="force-register-domain" value="auto"/>
+            <param name="force-subscription-domain" value="auto"/>
+            <param name="force-register-db-domain" value="auto"/>
+            <param name="ws-binding" value=":5066"/>
+            <param name="wss-binding" value=":7443"/>
+            <param name="challenge-realm" value="auto_from"/>
+          </settings>
+        </profile>
+        
+        <!-- EXTERNAL PROFILE - for trunks/gateways -->
         <profile name="external">
           <gateways>
             {gateway_xml}
           </gateways>
+          <aliases></aliases>
+          <domains>
+            <domain name="all" alias="false" parse="true"/>
+          </domains>
+          <settings>
+            <param name="debug" value="0"/>
+            <param name="sip-trace" value="no"/>
+            <param name="sip-capture" value="no"/>
+            <param name="rfc2833-pt" value="101"/>
+            <param name="sip-port" value="5080"/>
+            <param name="dialplan" value="XML"/>
+            <param name="context" value="public"/>
+            <param name="dtmf-duration" value="2000"/>
+            <param name="inbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
+            <param name="outbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
+            <param name="hold-music" value="local_stream://moh"/>
+            <param name="rtp-timer-name" value="soft"/>
+            <param name="local-network-acl" value="localnet.auto"/>
+            <param name="manage-presence" value="false"/>
+            <param name="inbound-codec-negotiation" value="generous"/>
+            <param name="nonce-ttl" value="60"/>
+            <param name="auth-calls" value="false"/>
+            <param name="inbound-late-negotiation" value="true"/>
+            <param name="rtp-ip" value="auto"/>
+            <param name="sip-ip" value="auto"/>
+            <param name="ext-rtp-ip" value="stun:stun.freeswitch.org"/>
+            <param name="ext-sip-ip" value="stun:stun.freeswitch.org"/>
+            <param name="rtp-timeout-sec" value="300"/>
+            <param name="rtp-hold-timeout-sec" value="1800"/>
+            <param name="tls" value="false"/>
+            <param name="tls-only" value="false"/>
+            <param name="tls-bind-params" value="transport=tls"/>
+            <param name="tls-sip-port" value="5081"/>
+            <param name="tls-passphrase" value=""/>
+            <param name="tls-verify-date" value="true"/>
+            <param name="tls-verify-policy" value="none"/>
+            <param name="tls-verify-depth" value="2"/>
+            <param name="tls-verify-in-subjects" value=""/>
+            <param name="tls-version" value="tlsv1,tlsv1.1,tlsv1.2"/>
+          </settings>
         </profile>
       </profiles>
     </configuration>
