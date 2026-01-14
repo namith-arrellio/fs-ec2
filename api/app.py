@@ -247,16 +247,17 @@ def generate_user_xml(domain, user_id, user_data, store_data):
 </document>"""
 
 
-def generate_dialplan_xml(context, store_data=None):
+def generate_dialplan_xml(context, store_data=None, store_domain=None):
     """Dialplan with dynamic park slots + ESL routing"""
 
     if store_data and store_data.get("park_slots"):
         park_regex = "|".join(store_data["park_slots"])
+        lot_name = store_domain if store_domain else context
         park_extension = f"""
       <extension name="park_slot">
         <condition field="destination_number" expression="^(?:park\\+)?({park_regex})$">
           <action application="set" data="fifo_music=local_stream://moh"/>
-          <action application="valet_park" data="{context} $1"/>
+          <action application="valet_park" data="{lot_name} $1"/>
         </condition>
       </extension>"""
     else:
@@ -313,7 +314,7 @@ def freeswitch_handler():
         # Find store by context
         for store_domain, store_data in STORES.items():
             if store_data["context"] == context:
-                xml = generate_dialplan_xml(context, store_data)
+                xml = generate_dialplan_xml(context, store_data, store_domain)
                 return Response(xml, mimetype="text/xml")
 
         # Public or unknown - no park slots, just ESL
