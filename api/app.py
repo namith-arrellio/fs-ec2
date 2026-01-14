@@ -267,6 +267,8 @@ def generate_user_xml(domain, user_id, user_data, store_data):
 
 def generate_park_slot_xml(domain, slot_id):
     """Generate directory entry for park slot BLF subscriptions"""
+    slot = re.sub(r"^park\+", "", slot_id)
+    presence = f"park+{slot}@{domain}"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <document type="freeswitch/xml">
   <section name="directory">
@@ -276,7 +278,7 @@ def generate_park_slot_xml(domain, slot_id):
           <param name="dial-string" value="error/user_not_registered"/>
         </params>
         <variables>
-          <variable name="presence_id" value="{slot_id}@{domain}"/>
+          <variable name="presence_id" value="{presence}"/>
         </variables>
       </user>
     </domain>
