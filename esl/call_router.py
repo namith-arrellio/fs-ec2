@@ -1,3 +1,4 @@
+from _typeshed import StrPath
 from gevent import monkey
 
 monkey.patch_all()
@@ -202,7 +203,9 @@ class CallHandler:
         self.session.call_command("set", "hangup_after_bridge=true")
         self.session.call_command("set", "continue_on_fail=true")
 
-        targets = ",".join([f"user/{ext}" for ext in store["ring_group"]])
+        targets = ",".join(
+            [f"user/{ext}@{store_domain}" for ext in store["ring_group"]]
+        )
         bridge_string = f"{{leg_timeout=30,ignore_early_media=true}}{targets}"
 
         logger.info(f"🔔 Ringing: {targets}")
@@ -243,7 +246,7 @@ class CallHandler:
             self.session.call_command("set", "call_timeout=30")
             self.session.call_command("set", "hangup_after_bridge=true")
             try:
-                self.session.bridge(f"user/{called}")
+                self.session.bridge(f"user/{called}@{store_domain}")
             except OutboundSessionHasGoneAway:
                 logger.info("📴 Call ended during extension bridge")
             return
