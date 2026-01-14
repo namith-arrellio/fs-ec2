@@ -114,6 +114,7 @@ def not_found_xml():
 def generate_sofia_conf_xml():
     """Generate COMPLETE sofia.conf.xml with both profiles and dynamic gateways"""
     local_ip = "0.0.0.0"
+    all_presence_hosts = ",".join(STORES.keys())
 
     # Build gateway XML
     gateway_xml = ""
@@ -171,6 +172,7 @@ def generate_sofia_conf_xml():
             <param name="rtp-timeout-sec" value="300"/>
             <param name="rtp-hold-timeout-sec" value="1800"/>
             <param name="manage-presence" value="true"/>
+            <param name="presence-hosts" value="{all_presence_hosts}"/>
             <param name="inbound-late-negotiation" value="true"/>
             <param name="tls" value="false"/>
             <param name="ws-binding" value=":5066"/>
