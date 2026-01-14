@@ -34,6 +34,8 @@ cd /usr/src/sofia-sip && ./bootstrap.sh && ./configure && make -j$(nproc) && mak
 # Clone and build FreeSWITCH 
 RUN git clone https://github.com/signalwire/freeswitch.git /usr/src/freeswitch && \ 
 cd /usr/src/freeswitch && chmod +x bootstrap.sh && bash ./bootstrap.sh -j && \ 
+# Enable mod_xml_curl for dynamic configuration
+sed -i 's|#xml_int/mod_xml_curl|xml_int/mod_xml_curl|' modules.conf && \
 ./configure && make -j$(nproc) && make install && \ 
 make sounds-install && make moh-install 
 
