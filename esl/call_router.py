@@ -1,4 +1,3 @@
-from _typeshed import StrPath
 from gevent import monkey
 
 monkey.patch_all()
