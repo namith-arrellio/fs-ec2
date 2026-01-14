@@ -151,7 +151,7 @@ def generate_store_dialplan_xml(domain, store_data):
       <!-- Internal extension dialing -->
       <extension name="local_extension">
         <condition field="destination_number" expression="^(10[01][0-9])$">
-          <action application="bridge" data="user/$1@{domain}"/>
+          <action application="bridge" data="user/$1@$$${{domain}}"/>
         </condition>
       </extension>
 
