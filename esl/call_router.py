@@ -178,13 +178,19 @@ class CallHandler:
         else:
             store_domain, store = find_store_for_call(self.session.session_data)
 
-        lot_name = store_domain
+        lot_name = "park"
+        presence_id = f"{slot}@{lot_name}"
 
         logger.info(f"🅿️ Park slot {slot} → lot {lot_name}")
+
+        # Send BLF "busy" state via API
+        self.session.api(f"presence in {presence_id} on 'Parked Call'")
+
         self.session.call_command("set", "fifo_music=local_stream://moh")
-        # ADD THIS LINE - Set presence_id to match BLF subscription
-        self.session.call_command("set", f"presence_id={slot}@{lot_name}")
         self.session.call_command("valet_park", f"{lot_name} {slot}")
+
+        # When valet_park returns, call was retrieved or hung up - send "available"
+        self.session.api(f"presence out {presence_id} on 'Available'")
 
     def handle_inbound(self, called, caller):
         """Inbound PSTN call → ring group"""

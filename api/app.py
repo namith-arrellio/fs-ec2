@@ -252,7 +252,7 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
 
     if store_data and store_data.get("park_slots"):
         park_regex = "|".join(store_data["park_slots"])
-        lot_name = store_domain if store_domain else context
+        lot_name = "park"
         park_extension = f"""
       <extension name="park_slot">
         <condition field="destination_number" expression="^(?:park\\+)?({park_regex})$">
@@ -279,6 +279,25 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
 </document>"""
 
 
+def generate_park_slot_xml(domain, slot):
+    """Generate directory entry for park slot BLF"""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<document type="freeswitch/xml">
+  <section name="directory">
+    <domain name="{domain}">
+      <user id="park+{slot}">
+        <params>
+          <param name="dial-string" value="park+{slot}"/>
+        </params>
+        <variables>
+          <variable name="user_context" value="public"/>
+        </variables>
+      </user>
+    </domain>
+  </section>
+</document>"""
+
+
 @app.route("/freeswitch", methods=["POST"])
 def freeswitch_handler():
     section = request.form.get("section", "")
@@ -290,6 +309,13 @@ def freeswitch_handler():
         user = request.form.get("user", "")
 
         logger.info(f"Directory: {user}@{lookup_domain}")
+
+        # In freeswitch_handler(), inside the directory section:
+        if user.startswith("park+"):
+            xml = generate_park_slot_xml(
+                response_domain or lookup_domain, user.replace("park+", "")
+            )
+            return Response(xml, mimetype="text/xml")
 
         if lookup_domain not in STORES:
             return Response(not_found_xml(), mimetype="text/xml")
