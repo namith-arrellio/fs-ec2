@@ -180,20 +180,18 @@ class CallHandler:
         """Handle park slot - works from any context"""
         slot = get_park_slot_number(called)
 
-        # Determine which store's park lot to use
         if context in CONTEXT_TO_STORE:
-            # Direct from store context - use that store
             store_domain = CONTEXT_TO_STORE[context]
             store = STORES[store_domain]
-            park_context = context
         else:
-            # From public context (transfer) - find store from call variables
             store_domain, store = find_store_for_call(self.session.session_data)
-            park_context = store["context"]
 
-        logger.info(f"🅿️ Park slot {slot} → {park_context} (store: {store_domain})")
+        # Use store domain (store1.local) as lot name to match phone subscription
+        lot_name = store_domain  # e.g., "store1.local"
+
+        logger.info(f"🅿️ Park slot {slot} → lot {lot_name}")
         self.session.call_command("set", "fifo_music=local_stream://moh")
-        self.session.call_command("valet_park", f"{park_context} {slot}")
+        self.session.call_command("valet_park", f"{lot_name} {slot}")
 
     def handle_inbound(self, called, caller):
         """Inbound PSTN call → ring group"""
