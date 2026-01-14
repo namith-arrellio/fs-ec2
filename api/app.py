@@ -195,28 +195,35 @@ def freeswitch_handler():
 
     # DIRECTORY REQUESTS
     if section == "directory":
-        # FreeSWITCH may force domain to IP address, but sip_auth_realm has the real domain
-        domain = request.form.get("sip_auth_realm", "") or request.form.get(
-            "domain", ""
-        )
+        # Domain FreeSWITCH expects in the response
+        response_domain = request.form.get("domain", "")
+
+        # Domain to use for user lookup (sip_auth_realm has the real domain)
+        lookup_domain = request.form.get("sip_auth_realm", "") or response_domain
+
         user = request.form.get("user", "")
         action = request.form.get("action", "")
 
-        logger.info(f"Directory request: user={user}, domain={domain}, action={action}")
+        logger.info(
+            f"Directory request: user={user}, lookup_domain={lookup_domain}, response_domain={response_domain}, action={action}"
+        )
 
-        if domain not in STORES:
-            logger.warning(f"Domain not found: {domain}")
+        if lookup_domain not in STORES:
+            logger.warning(f"Domain not found: {lookup_domain}")
             return Response(not_found_xml(), mimetype="text/xml")
 
-        store_data = STORES[domain]
+        store_data = STORES[lookup_domain]
 
         if user not in store_data["users"]:
-            logger.warning(f"User not found: {user}@{domain}")
+            logger.warning(f"User not found: {user}@{lookup_domain}")
             return Response(not_found_xml(), mimetype="text/xml")
 
         user_data = store_data["users"][user]
-        xml = generate_user_xml(domain, user, user_data, store_data)
-        logger.debug(f"Returning user XML for {user}@{domain}")
+        # Use response_domain in the XML, but data from lookup_domain
+        xml = generate_user_xml(
+            response_domain or lookup_domain, user, user_data, store_data
+        )
+        logger.debug(f"Returning user XML for {user}@{response_domain}")
         return Response(xml, mimetype="text/xml")
 
     # DIALPLAN REQUESTS
