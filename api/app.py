@@ -268,7 +268,7 @@ def generate_user_xml(domain, user_id, user_data, store_data):
 def generate_park_slot_xml(domain, slot_id):
     """Generate directory entry for park slot BLF subscriptions"""
     slot = re.sub(r"^park\+", "", slot_id)
-    presence = f"park+{slot}@{domain}"
+    presence = f"{slot}@{domain}"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <document type="freeswitch/xml">
   <section name="directory">
@@ -290,7 +290,7 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
     """Dialplan with dynamic park slots + ESL routing"""
 
     # Use store_domain as the lot name for consistent valet_park presence
-    # This ensures BLF subscriptions (park+700@domain) work correctly
+    # This ensures BLF subscriptions (700@domain) work correctly
     lot_name = store_domain or context
 
     print(f"LOT_NAME: {lot_name}")
@@ -301,6 +301,7 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
       <extension name="park_slot">
         <condition field="destination_number" expression="^(?:park\\+)?({park_regex})$">
           <action application="set" data="fifo_music=local_stream://moh"/>
+          <action application="set" data="presence_id=$1@{lot_name}"/>
           <action application="valet_park" data="{lot_name} $1"/>
         </condition>
       </extension>"""

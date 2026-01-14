@@ -179,13 +179,13 @@ class CallHandler:
             store_domain, store = find_store_for_call(self.session.session_data)
 
         # Use store_domain as lot name - this ensures BLF presence works
-        # Phones subscribe to park+700@store1.local, valet_park publishes to same
+        # Phones subscribe to 700@store1.local, valet_park publishes to same
         lot_name = store_domain
 
         logger.info(f"🅿️ Park slot {slot} → lot {lot_name}")
         self.session.call_command("set", "fifo_music=local_stream://moh")
-        # Set presence_id so BLF subscriptions (park+<slot>@<domain>) see the state change
-        self.session.call_command("set", f"presence_id=park+{slot}@{lot_name}")
+        # Set presence_id so BLF subscriptions (<slot>@<domain>) see the state change
+        self.session.call_command("set", f"presence_id={slot}@{lot_name}")
         self.session.call_command("valet_park", f"{lot_name} {slot}")
 
     def handle_inbound(self, called, caller):
