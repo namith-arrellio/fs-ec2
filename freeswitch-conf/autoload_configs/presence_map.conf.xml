@@ -2,7 +2,6 @@
   <domains>
     <domain name="$${domain}">
       <exten regex="3\d+" proto="conf"/>
-      <exten regex="(?:park\+)?70\d+" proto="dialog"/>
     </domain>
   </domains>
 </configuration>
