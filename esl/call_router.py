@@ -4,6 +4,7 @@ monkey.patch_all()
 
 import gevent
 import greenswitch
+from greenswitch.esl import OutboundSessionHasGoneAway
 import logging
 import re
 
@@ -88,9 +89,7 @@ def get_store_by_did(called_number):
 
 def is_park_slot(called):
     """Check if destination is a park slot (handles park+70x or just 70x)"""
-    # Strip park+ prefix if present
     slot = re.sub(r"^park\+", "", called)
-    # Check if it matches 70x pattern
     return bool(re.match(r"^70\d$", slot))
 
 
@@ -101,34 +100,28 @@ def get_park_slot_number(called):
 
 def find_store_for_call(session_data):
     """Determine which store this call belongs to from session variables"""
-    # Try variable_domain_name
     domain = session_data.get("variable_domain_name", "")
     if domain in STORES:
         return domain, STORES[domain]
 
-    # Try variable_sip_auth_realm (the domain user registered to)
     realm = session_data.get("variable_sip_auth_realm", "")
     if realm in STORES:
         return realm, STORES[realm]
 
-    # Try variable_sip_from_host
     from_host = session_data.get("variable_sip_from_host", "")
     if from_host in STORES:
         return from_host, STORES[from_host]
 
-    # Try user_context variable
     user_context = session_data.get("variable_user_context", "")
     if user_context in CONTEXT_TO_STORE:
         domain = CONTEXT_TO_STORE[user_context]
         return domain, STORES[domain]
 
-    # Try Caller-Context (last resort)
     context = session_data.get("Caller-Context", "")
     if context in CONTEXT_TO_STORE:
         domain = CONTEXT_TO_STORE[context]
         return domain, STORES[domain]
 
-    # Default to first store
     logger.warning("Could not determine store, using default")
     first_domain = list(STORES.keys())[0]
     return first_domain, STORES[first_domain]
@@ -142,6 +135,9 @@ class CallHandler:
     def run(self):
         try:
             self.handle_call()
+        except OutboundSessionHasGoneAway:
+            # Call was transferred or hung up - this is normal
+            logger.info("📴 Call ended or transferred")
         except Exception as e:
             logger.exception(f"Error: {e}")
         finally:
@@ -158,16 +154,12 @@ class CallHandler:
 
         logger.info(f"📞 {caller} → {called} | Context: {context} | UUID: {uuid[:8]}")
 
-        # =================================================================
-        # PARK SLOT - Check FIRST, handles both 70x and park+70x
-        # =================================================================
+        # PARK SLOT - Check FIRST
         if is_park_slot(called):
             self.handle_park(called, caller, context)
             return
 
-        # =================================================================
         # NORMAL ROUTING
-        # =================================================================
         if context == "public":
             self.handle_inbound(called, caller)
         elif context in CONTEXT_TO_STORE:
@@ -186,8 +178,7 @@ class CallHandler:
         else:
             store_domain, store = find_store_for_call(self.session.session_data)
 
-        # Use store domain (store1.local) as lot name to match phone subscription
-        lot_name = store_domain  # e.g., "store1.local"
+        lot_name = store_domain
 
         logger.info(f"🅿️ Park slot {slot} → lot {lot_name}")
         self.session.call_command("set", "fifo_music=local_stream://moh")
@@ -215,18 +206,26 @@ class CallHandler:
         bridge_string = f"{{leg_timeout=30,ignore_early_media=true}}{targets}"
 
         logger.info(f"🔔 Ringing: {targets}")
-        self.session.bridge(bridge_string)
+
+        try:
+            self.session.bridge(bridge_string)
+        except OutboundSessionHasGoneAway:
+            logger.info("📴 Call transferred or ended during bridge")
+            return
 
         hangup_cause = self.session.session_data.get(
             "variable_originate_disposition", ""
         )
         if hangup_cause not in ["SUCCESS", "ORIGINATOR_CANCEL"]:
             logger.info(f"Bridge result: {hangup_cause}, sending to voicemail")
-            self.session.call_command("answer")
-            gevent.sleep(0.5)
-            self.session.call_command(
-                "voicemail", f"default {store_domain} {store['ring_group'][0]}"
-            )
+            try:
+                self.session.call_command("answer")
+                gevent.sleep(0.5)
+                self.session.call_command(
+                    "voicemail", f"default {store_domain} {store['ring_group'][0]}"
+                )
+            except OutboundSessionHasGoneAway:
+                logger.info("📴 Caller hung up before voicemail")
 
     def handle_internal(self, called, caller, context):
         """Internal call (extension or outbound)"""
@@ -243,7 +242,10 @@ class CallHandler:
             self.session.call_command("set", "ringback=${us-ring}")
             self.session.call_command("set", "call_timeout=30")
             self.session.call_command("set", "hangup_after_bridge=true")
-            self.session.bridge(f"user/{called}")
+            try:
+                self.session.bridge(f"user/{called}")
+            except OutboundSessionHasGoneAway:
+                logger.info("📴 Call ended during extension bridge")
             return
 
         # Outbound call
@@ -260,7 +262,10 @@ class CallHandler:
             elif not dial_number.startswith("+"):
                 dial_number = f"+{dial_number}"
 
-            self.session.bridge(f"sofia/gateway/{store['gateway']}/{dial_number}")
+            try:
+                self.session.bridge(f"sofia/gateway/{store['gateway']}/{dial_number}")
+            except OutboundSessionHasGoneAway:
+                logger.info("📴 Call ended during outbound bridge")
             return
 
         logger.warning(f"Unknown destination: {called}")
