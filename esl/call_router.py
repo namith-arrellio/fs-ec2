@@ -67,7 +67,6 @@ for domain, data in STORES.items():
 
 
 def normalize_number(number):
-    """Strip +1 and formatting"""
     if not number:
         return ""
     return (
@@ -80,7 +79,6 @@ def normalize_number(number):
 
 
 def get_store_by_did(called_number):
-    """Find store by DID"""
     normalized = normalize_number(called_number)
     for variant in [called_number, normalized, f"1{normalized}", f"+1{normalized}"]:
         if variant in DID_TO_STORE:
@@ -88,16 +86,52 @@ def get_store_by_did(called_number):
     return None
 
 
-def is_park_slot(called, store):
-    """Check if destination is a park slot for this store"""
-    # Strip 'park+' prefix if present (from blind transfer)
+def is_park_slot(called):
+    """Check if destination is a park slot (handles park+70x or just 70x)"""
+    # Strip park+ prefix if present
     slot = re.sub(r"^park\+", "", called)
-    return slot in store.get("park_slots", [])
+    # Check if it matches 70x pattern
+    return bool(re.match(r"^70\d$", slot))
 
 
-def get_park_slot(called):
-    """Extract park slot number, stripping park+ prefix if present"""
+def get_park_slot_number(called):
+    """Extract just the slot number (e.g., 701 from park+701)"""
     return re.sub(r"^park\+", "", called)
+
+
+def find_store_for_call(session_data):
+    """Determine which store this call belongs to from session variables"""
+    # Try variable_domain_name
+    domain = session_data.get("variable_domain_name", "")
+    if domain in STORES:
+        return domain, STORES[domain]
+
+    # Try variable_sip_auth_realm (the domain user registered to)
+    realm = session_data.get("variable_sip_auth_realm", "")
+    if realm in STORES:
+        return realm, STORES[realm]
+
+    # Try variable_sip_from_host
+    from_host = session_data.get("variable_sip_from_host", "")
+    if from_host in STORES:
+        return from_host, STORES[from_host]
+
+    # Try user_context variable
+    user_context = session_data.get("variable_user_context", "")
+    if user_context in CONTEXT_TO_STORE:
+        domain = CONTEXT_TO_STORE[user_context]
+        return domain, STORES[domain]
+
+    # Try Caller-Context (last resort)
+    context = session_data.get("Caller-Context", "")
+    if context in CONTEXT_TO_STORE:
+        domain = CONTEXT_TO_STORE[context]
+        return domain, STORES[domain]
+
+    # Default to first store
+    logger.warning("Could not determine store, using default")
+    first_domain = list(STORES.keys())[0]
+    return first_domain, STORES[first_domain]
 
 
 class CallHandler:
@@ -117,7 +151,6 @@ class CallHandler:
         self.session.myevents()
         self.session.linger()
 
-        # Get call info
         called = self.session.session_data.get("Caller-Destination-Number", "")
         caller = self.session.session_data.get("Caller-Caller-ID-Number", "")
         context = self.session.session_data.get("Caller-Context", "")
@@ -125,6 +158,16 @@ class CallHandler:
 
         logger.info(f"📞 {caller} → {called} | Context: {context} | UUID: {uuid[:8]}")
 
+        # =================================================================
+        # PARK SLOT - Check FIRST, handles both 70x and park+70x
+        # =================================================================
+        if is_park_slot(called):
+            self.handle_park(called, caller, context)
+            return
+
+        # =================================================================
+        # NORMAL ROUTING
+        # =================================================================
         if context == "public":
             self.handle_inbound(called, caller)
         elif context in CONTEXT_TO_STORE:
@@ -132,6 +175,25 @@ class CallHandler:
         else:
             logger.warning(f"Unknown context: {context}")
             self.session.hangup("CALL_REJECTED")
+
+    def handle_park(self, called, caller, context):
+        """Handle park slot - works from any context"""
+        slot = get_park_slot_number(called)
+
+        # Determine which store's park lot to use
+        if context in CONTEXT_TO_STORE:
+            # Direct from store context - use that store
+            store_domain = CONTEXT_TO_STORE[context]
+            store = STORES[store_domain]
+            park_context = context
+        else:
+            # From public context (transfer) - find store from call variables
+            store_domain, store = find_store_for_call(self.session.session_data)
+            park_context = store["context"]
+
+        logger.info(f"🅿️ Park slot {slot} → {park_context} (store: {store_domain})")
+        self.session.call_command("set", "fifo_music=local_stream://moh")
+        self.session.call_command("valet_park", f"{park_context} {slot}")
 
     def handle_inbound(self, called, caller):
         """Inbound PSTN call → ring group"""
@@ -145,21 +207,18 @@ class CallHandler:
         store = STORES[store_domain]
         logger.info(f"🏪 Inbound → {store_domain}")
 
-        # Set variables
         self.session.call_command("set", f"domain_name={store_domain}")
         self.session.call_command("set", "ringback=${us-ring}")
         self.session.call_command("set", "call_timeout=30")
         self.session.call_command("set", "hangup_after_bridge=true")
         self.session.call_command("set", "continue_on_fail=true")
 
-        # Ring group
         targets = ",".join([f"user/{ext}" for ext in store["ring_group"]])
         bridge_string = f"{{leg_timeout=30,ignore_early_media=true}}{targets}"
 
         logger.info(f"🔔 Ringing: {targets}")
-        result = self.session.bridge(bridge_string)
+        self.session.bridge(bridge_string)
 
-        # If bridge failed, go to voicemail
         hangup_cause = self.session.session_data.get(
             "variable_originate_disposition", ""
         )
@@ -172,7 +231,7 @@ class CallHandler:
             )
 
     def handle_internal(self, called, caller, context):
-        """Internal call (extension, park, or outbound)"""
+        """Internal call (extension or outbound)"""
         store_domain = CONTEXT_TO_STORE.get(context)
         if not store_domain:
             self.session.hangup("CALL_REJECTED")
@@ -180,20 +239,7 @@ class CallHandler:
 
         store = STORES[store_domain]
 
-        # =================================================================
-        # PARK SLOT - valet park (toggle: park or retrieve)
-        # =================================================================
-        if is_park_slot(called, store):
-            slot = get_park_slot(called)
-            logger.info(f"🅿️ Park slot {slot} in {context}")
-            self.session.call_command("set", "fifo_music=local_stream://moh")
-            # valet_park toggles: if slot empty, park the call; if occupied, retrieve
-            self.session.call_command("valet_park", f"{context} {slot}")
-            return
-
-        # =================================================================
-        # EXTENSION CALL
-        # =================================================================
+        # Extension call
         if called in store["extensions"]:
             logger.info(f"📱 Extension call → {called}")
             self.session.call_command("set", "ringback=${us-ring}")
@@ -202,9 +248,7 @@ class CallHandler:
             self.session.bridge(f"user/{called}")
             return
 
-        # =================================================================
-        # OUTBOUND CALL (10+ digits)
-        # =================================================================
+        # Outbound call
         if len(called) >= 10:
             logger.info(f"📤 Outbound → {called}")
             self.session.call_command(
