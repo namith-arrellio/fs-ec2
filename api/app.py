@@ -293,13 +293,14 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
     # This ensures BLF subscriptions (park+700@domain) work correctly
     lot_name = store_domain or context
 
+    print(f"LOT_NAME: {lot_name}")
+
     if store_data and store_data.get("park_slots"):
         park_regex = "|".join(store_data["park_slots"])
         park_extension = f"""
       <extension name="park_slot">
         <condition field="destination_number" expression="^(?:park\\+)?({park_regex})$">
           <action application="set" data="fifo_music=local_stream://moh"/>
-          <action application="set" data="presence_id=park+$1@{lot_name}"/>
           <action application="valet_park" data="{lot_name} $1"/>
         </condition>
       </extension>"""
@@ -351,12 +352,12 @@ def freeswitch_handler():
 
         store_data = STORES[lookup_domain]
 
-        # Check if this is a park slot lookup (for BLF subscriptions)
-        if is_park_slot_user(user, store_data):
-            domain = response_domain or lookup_domain
-            logger.info(f"Park slot directory lookup: {user}@{domain}")
-            xml = generate_park_slot_xml(domain, user)
-            return Response(xml, mimetype="text/xml")
+        # # Check if this is a park slot lookup (for BLF subscriptions)
+        # if is_park_slot_user(user, store_data):
+        #     domain = response_domain or lookup_domain
+        #     logger.info(f"Park slot directory lookup: {user}@{domain}")
+        #     xml = generate_park_slot_xml(domain, user)
+        #     return Response(xml, mimetype="text/xml")
 
         # Regular user lookup
         if user not in store_data["users"]:
