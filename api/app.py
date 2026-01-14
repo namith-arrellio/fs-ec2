@@ -87,6 +87,12 @@ GATEWAYS = {
         "proxy": "sip.telnyx.com",
         "register": "true",
         "caller_id_in_from": "true",
+        # Registration keepalive settings
+        "expire_seconds": "120",  # Re-register every 2 minutes
+        "retry_seconds": "30",  # Retry failed registration after 30s
+        "ping": "25",  # Send OPTIONS ping every 25s to keep NAT open
+        "ping_max": "3",  # 3 failed pings = gateway down
+        "ping_min": "1",  # 1 successful ping = gateway up
     },
     "telnyx_store2": {
         "username": "1009",
@@ -95,6 +101,12 @@ GATEWAYS = {
         "proxy": "sip.telnyx.com",
         "register": "true",
         "caller_id_in_from": "true",
+        # Registration keepalive settings
+        "expire_seconds": "120",
+        "retry_seconds": "30",
+        "ping": "25",
+        "ping_max": "3",
+        "ping_min": "1",
     },
     # Add more gateways dynamically here
 }
@@ -128,6 +140,11 @@ def generate_sofia_conf_xml():
             <param name="proxy" value="{gw_data['proxy']}"/>
             <param name="register" value="{gw_data.get('register', 'true')}"/>
             <param name="caller-id-in-from" value="{gw_data.get('caller_id_in_from', 'true')}"/>
+            <param name="expire-seconds" value="{gw_data.get('expire_seconds', '120')}"/>
+            <param name="retry-seconds" value="{gw_data.get('retry_seconds', '30')}"/>
+            <param name="ping" value="{gw_data.get('ping', '25')}"/>
+            <param name="ping-max" value="{gw_data.get('ping_max', '3')}"/>
+            <param name="ping-min" value="{gw_data.get('ping_min', '1')}"/>
           </gateway>"""
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
