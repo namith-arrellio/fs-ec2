@@ -1,0 +1,26 @@
+# Database files
+*.db
+*.db-journal
+
+# Log files
+log/
+*.log
+*.log.*
+
+# PID files
+*.pid
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# TLS certificates (sensitive)
+tls/
+*.pem
+*.key
+*.crt
+
+# Runtime data
+db/
+run/

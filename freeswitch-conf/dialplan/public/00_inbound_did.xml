@@ -1,0 +1,33 @@
+<include>
+  <!-- Store 1 Inbound - +17577828734 -->
+  <extension name="store1_inbound">
+    <condition field="destination_number" expression="^(\+?1?7577828734)$">
+      <action application="set" data="domain_name=store1.local"/>
+      <action application="set" data="transfer_context=store1"/>
+      <action application="set" data="ringback=${us-ring}"/>
+      <action application="set" data="call_timeout=30"/>
+      <action application="set" data="hangup_after_bridge=true"/>
+      <action application="set" data="continue_on_fail=true"/>
+      <action application="bridge" data="{leg_timeout=30,ignore_early_media=true}user/1000@store1.local,user/1001@store1.local"/>
+      <action application="answer"/>
+      <action application="sleep" data="1000"/>
+      <action application="voicemail" data="default store1.local 1000"/>
+    </condition>
+  </extension>
+
+  <!-- Store 2 Inbound - +17372449688 -->
+  <extension name="store2_inbound">
+    <condition field="destination_number" expression="^(\+?1?7372449688)$">
+      <action application="set" data="domain_name=store2.local"/>
+      <action application="set" data="transfer_context=store2"/>
+      <action application="set" data="ringback=${us-ring}"/>
+      <action application="set" data="call_timeout=30"/>
+      <action application="set" data="hangup_after_bridge=true"/>
+      <action application="set" data="continue_on_fail=true"/>
+      <action application="bridge" data="{leg_timeout=30,ignore_early_media=true}user/1000@store2.local,user/1001@store2.local"/>
+      <action application="answer"/>
+      <action application="sleep" data="1000"/>
+      <action application="voicemail" data="default store2.local 1000"/>
+    </condition>
+  </extension>
+</include>

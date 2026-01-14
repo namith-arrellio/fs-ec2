@@ -1,0 +1,16 @@
+<include>
+  <user id="1000">
+    <params>
+      <param name="password" value="123456"/>
+      <param name="vm-password" value="1000"/>
+    </params>
+    <variables>
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="store1-1000"/>
+      <variable name="user_context" value="store1"/>
+      <variable name="effective_caller_id_name" value="Store 1 - Ext 1000"/>
+      <variable name="effective_caller_id_number" value="1000"/>
+      <variable name="outbound_caller_id_number" value="+17577828734"/>
+    </variables>
+  </user>
+</include>

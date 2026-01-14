@@ -1,0 +1,27 @@
+<include>
+  <context name="store2">
+    <!-- Internal extension dialing -->
+    <extension name="local_extension">
+      <condition field="destination_number" expression="^(10[01][0-9])$">
+        <action application="bridge" data="user/$1@store2.local"/>
+      </condition>
+    </extension>
+
+    <!-- Park slots 700, 701, 702 (toggle: park or retrieve) -->
+    <!-- Park slots 700, 701, 702 with BLF support -->
+   <extension name="park_slot">
+      <condition field="destination_number" expression="^(?:park\+)?(70[0-2])$">
+        <action application="set" data="fifo_music=local_stream://moh"/>
+        <action application="valet_park" data="store2 $1"/>
+      </condition>
+    </extension>
+
+    <!-- Outbound calls via Store 2's Telnyx trunk -->
+    <extension name="outbound">
+      <condition field="destination_number" expression="^(\+?1?\d{10})$">
+        <action application="set" data="effective_caller_id_number=+17372449688"/>
+        <action application="bridge" data="sofia/gateway/telnyx_store2/+1$1"/>
+      </condition>
+    </extension>
+  </context>
+</include>
