@@ -81,7 +81,7 @@ STORES = {
 GATEWAYS = {
     "telnyx_store1": {
         "username": "testarrellio",
-        "password": "your_password_here",
+        "password": "12345678",
         "realm": "sip.telnyx.com",
         "proxy": "sip.telnyx.com",
         "register": "true",
@@ -89,7 +89,7 @@ GATEWAYS = {
     },
     "telnyx_store2": {
         "username": "1009",
-        "password": "your_password_here",
+        "password": "12345678",
         "realm": "sip.telnyx.com",
         "proxy": "sip.telnyx.com",
         "register": "true",
