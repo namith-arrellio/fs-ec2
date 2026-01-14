@@ -195,7 +195,10 @@ def freeswitch_handler():
 
     # DIRECTORY REQUESTS
     if section == "directory":
-        domain = request.form.get("domain", "")
+        # FreeSWITCH may force domain to IP address, but sip_auth_realm has the real domain
+        domain = request.form.get("sip_auth_realm", "") or request.form.get(
+            "domain", ""
+        )
         user = request.form.get("user", "")
         action = request.form.get("action", "")
 
