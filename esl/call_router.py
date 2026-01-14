@@ -182,6 +182,8 @@ class CallHandler:
 
         logger.info(f"🅿️ Park slot {slot} → lot {lot_name}")
         self.session.call_command("set", "fifo_music=local_stream://moh")
+        # ADD THIS LINE - Set presence_id to match BLF subscription
+        self.session.call_command("set", f"presence_id={slot}@{lot_name}")
         self.session.call_command("valet_park", f"{lot_name} {slot}")
 
     def handle_inbound(self, called, caller):

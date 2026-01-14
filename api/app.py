@@ -257,6 +257,7 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
       <extension name="park_slot">
         <condition field="destination_number" expression="^(?:park\\+)?({park_regex})$">
           <action application="set" data="fifo_music=local_stream://moh"/>
+          <action application="set" data="presence_id=$1@{lot_name}"/>
           <action application="valet_park" data="{lot_name} $1"/>
         </condition>
       </extension>"""
