@@ -89,13 +89,7 @@ def get_store_by_did(called_number):
 
 def is_park_slot(called):
     """Check if destination is a park slot (handles park+70x or just 70x)"""
-    slot = re.sub(r"^park\+", "", called)
-    return bool(re.match(r"^70\d$", slot))
-
-
-def get_park_slot_number(called):
-    """Extract just the slot number (e.g., 701 from park+701)"""
-    return re.sub(r"^park\+", "", called)
+    return bool(re.match(r"^70\d$", called))
 
 
 def find_store_for_call(session_data):
@@ -169,9 +163,6 @@ class CallHandler:
             self.session.hangup("CALL_REJECTED")
 
     def handle_park(self, called, caller, context):
-        """Handle park slot - works from any context"""
-        slot = get_park_slot_number(called)
-
         if context in CONTEXT_TO_STORE:
             store_domain = CONTEXT_TO_STORE[context]
             store = STORES[store_domain]
@@ -181,12 +172,13 @@ class CallHandler:
         # Use store_domain as lot name - this ensures BLF presence works
         # Phones subscribe to 700@store1.local, valet_park publishes to same
         lot_name = store_domain
+        logger.info(f"LOT_NAME: {lot_name}")
 
-        logger.info(f"🅿️ Park slot {slot} → lot {lot_name}")
+        logger.info(f"🅿️ Park slot {called} → lot {lot_name}")
         self.session.call_command("set", "fifo_music=local_stream://moh")
         # Set presence_id so BLF subscriptions (<slot>@<domain>) see the state change
-        self.session.call_command("set", f"presence_id={slot}@{lot_name}")
-        self.session.call_command("valet_park", f"{lot_name} {slot}")
+        self.session.call_command("set", f"presence_id={called}@{lot_name}")
+        self.session.call_command("valet_park", f"{lot_name} {called}")
 
     def handle_inbound(self, called, caller):
         """Inbound PSTN call → ring group"""

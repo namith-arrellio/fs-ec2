@@ -289,30 +289,10 @@ def generate_park_slot_xml(domain, slot_id):
 def generate_dialplan_xml(context, store_data=None, store_domain=None):
     """Dialplan with dynamic park slots + ESL routing"""
 
-    # Use store_domain as the lot name for consistent valet_park presence
-    # This ensures BLF subscriptions (700@domain) work correctly
-    lot_name = store_domain or context
-
-    print(f"LOT_NAME: {lot_name}")
-
-    if store_data and store_data.get("park_slots"):
-        park_regex = "|".join(store_data["park_slots"])
-        park_extension = f"""
-      <extension name="park_slot">
-        <condition field="destination_number" expression="^(?:park\\+)?({park_regex})$">
-          <action application="set" data="fifo_music=local_stream://moh"/>
-          <action application="set" data="presence_id=$1@{lot_name}"/>
-          <action application="valet_park" data="{lot_name} $1"/>
-        </condition>
-      </extension>"""
-    else:
-        park_extension = ""
-
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <document type="freeswitch/xml">
   <section name="dialplan">
     <context name="{context}">
-      {park_extension}
       <extension name="esl_routing">
         <condition field="destination_number" expression="^(.*)$">
           <action application="socket" data="{ESL_HOST}:{ESL_PORT} async full"/>
@@ -321,18 +301,6 @@ def generate_dialplan_xml(context, store_data=None, store_domain=None):
     </context>
   </section>
 </document>"""
-
-
-def is_park_slot_user(user, store_data):
-    """Check if user is a park slot (park+700 or just 700)"""
-    # Strip park+ prefix if present
-    slot = re.sub(r"^park\+", "", user)
-    return slot in store_data.get("park_slots", [])
-
-
-def get_park_slot_number(user):
-    """Extract slot number from park+700 or 700"""
-    return re.sub(r"^park\+", "", user)
 
 
 @app.route("/freeswitch", methods=["POST"])
