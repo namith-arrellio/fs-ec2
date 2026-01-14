@@ -78,6 +78,26 @@ STORES = {
     },
 }
 
+GATEWAYS = {
+    "telnyx_store1": {
+        "username": "testarrellio",
+        "password": "your_password_here",
+        "realm": "sip.telnyx.com",
+        "proxy": "sip.telnyx.com",
+        "register": "true",
+        "caller_id_in_from": "true",
+    },
+    "telnyx_store2": {
+        "username": "1009",
+        "password": "your_password_here",
+        "realm": "sip.telnyx.com",
+        "proxy": "sip.telnyx.com",
+        "register": "true",
+        "caller_id_in_from": "true",
+    },
+    # Add more gateways dynamically here
+}
+
 ESL_HOST = "127.0.0.1"
 ESL_PORT = "5002"
 
@@ -87,6 +107,39 @@ def not_found_xml():
 <document type="freeswitch/xml">
   <section name="result">
     <result status="not found"/>
+  </section>
+</document>"""
+
+
+def generate_sofia_conf_xml():
+    """Generate sofia.conf.xml with dynamic gateways"""
+    gateway_xml = ""
+    for gw_name, gw_data in GATEWAYS.items():
+        gateway_xml += f"""
+        <gateway name="{gw_name}">
+          <param name="username" value="{gw_data['username']}"/>
+          <param name="password" value="{gw_data['password']}"/>
+          <param name="realm" value="{gw_data['realm']}"/>
+          <param name="proxy" value="{gw_data['proxy']}"/>
+          <param name="register" value="{gw_data.get('register', 'true')}"/>
+          <param name="caller-id-in-from" value="{gw_data.get('caller_id_in_from', 'true')}"/>
+        </gateway>"""
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<document type="freeswitch/xml">
+  <section name="configuration">
+    <configuration name="sofia.conf" description="sofia Configuration">
+      <global_settings>
+        <param name="log-level" value="0"/>
+      </global_settings>
+      <profiles>
+        <profile name="external">
+          <gateways>
+            {gateway_xml}
+          </gateways>
+        </profile>
+      </profiles>
+    </configuration>
   </section>
 </document>"""
 
@@ -190,6 +243,17 @@ def freeswitch_handler():
         # Public or unknown - no park slots, just ESL
         xml = generate_dialplan_xml(context)
         return Response(xml, mimetype="text/xml")
+
+    elif section == "configuration":
+        key_value = request.form.get("key_value", "")
+        logger.info(f"Configuration request: {key_value}")
+
+        if key_value == "sofia.conf":
+            xml = generate_sofia_conf_xml()
+            return Response(xml, mimetype="text/xml")
+
+        # Return not found for other configs (use static files)
+        return Response(not_found_xml(), mimetype="text/xml")
 
     return Response(not_found_xml(), mimetype="text/xml")
 
