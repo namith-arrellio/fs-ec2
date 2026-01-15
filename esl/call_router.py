@@ -432,8 +432,11 @@ class InboundCallHandler(object):
             gevent.sleep(0.5)
 
             targets = ",".join(route["targets"])
-            bridge_string = f"{{leg_timeout=30,ignore_early_media=true,sip_invite_domain={route['domain']}}}{targets}"
-            logger.info(f"Bridging to (via Kamailio): {targets}")
+            # Include X-Store-Domain header so Kamailio knows which domain for location lookup
+            bridge_string = f"{{leg_timeout=30,ignore_early_media=true,sip_invite_domain={route['domain']},sip_h_X-Store-Domain={route['domain']}}}{targets}"
+            logger.info(
+                f"Bridging to (via Kamailio): {targets} with domain {route['domain']}"
+            )
 
             self.session.bridge(bridge_string, block=False)
             logger.info("✓ Bridge command sent")
