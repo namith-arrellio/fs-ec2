@@ -1,4 +1,4 @@
-FROM ghcr.io/kamailio/kamailio:5.8
+FROM ghcr.io/kamailio/kamailio:5.7.3-bookworm
 
 # Install additional modules
 RUN apt-get update && apt-get install -y \
