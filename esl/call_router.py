@@ -427,19 +427,22 @@ class InboundCallHandler(object):
             self.session.call_command("set", "hangup_after_bridge=true")
             self.session.call_command("set", "continue_on_fail=true")
 
-            # Don't answer yet - pass early media (ringing) back to caller
-            # The call will be answered when the phone picks up
+            # Answer the call first (required for some SIP trunks)
+            logger.info("Answering call...")
+            self.session.answer()
+            logger.info("Call answered, starting bridge...")
 
             targets = ",".join(route["targets"])
             # Include X-Store-Domain header so Kamailio knows which domain for location lookup
-            bridge_string = f"{{leg_timeout=30,ignore_early_media=false,sip_invite_domain={route['domain']},sip_h_X-Store-Domain={route['domain']}}}{targets}"
-            logger.info(
-                f"Bridging to (via Kamailio): {targets} with domain {route['domain']}"
-            )
+            bridge_string = f"{{leg_timeout=30,origination_caller_id_number={caller_id},sip_invite_domain={route['domain']},sip_h_X-Store-Domain={route['domain']}}}{targets}"
+            logger.info(f"Bridging to: {targets} with domain {route['domain']}")
 
-            # IMPORTANT: block=True keeps ESL session alive until bridge completes
-            self.session.bridge(bridge_string, block=True)
-            logger.info("✓ Bridge completed (call ended)")
+            try:
+                # block=True keeps ESL session alive until bridge completes
+                self.session.bridge(bridge_string, block=True)
+                logger.info("✓ Bridge completed (call ended)")
+            except Exception as e:
+                logger.warning(f"Bridge ended with exception: {type(e).__name__}: {e}")
 
         elif route["action"] == "reject":
             logger.info(f"✗ Rejecting: {route.get('reason')}")
