@@ -7,15 +7,25 @@
       </condition>
     </extension>
 
-    <!-- Park slots 700, 701, 702 (toggle: park or retrieve) -->
-   <extension name="park_slot">
-  <condition field="destination_number" expression="^(70[0-9])$">
-    <action application="set" data="fifo_music=local_stream://moh"/>
-    <action application="valet_park" data="store1.local $1"/>
-  </condition>
-</extension>
+    <!-- FIFO-based parking slots 700-709 with BLF support -->
+    <extension name="parking_slots">
+      <condition field="destination_number" expression="^(70[0-9])$" break="on-false">
+        <!-- Get count of callers in this parking slot -->
+        <action inline="true" application="set" data="slot_count=${fifo(count $1@store1.local)}"/>
+        <action inline="true" application="set" data="slot_count=${slot_count:-9:2}"/>
+      </condition>
+      <condition field="${slot_count}" expression="^\:0$" break="always">
+        <!-- FIFO is empty - park the caller -->
+        <action application="answer"/>
+        <action application="set" data="fifo_chime_freq=0"/>
+        <action application="fifo" data="${destination_number}@store1.local in undef local_stream://moh"/>
+        <!-- FIFO has a caller - retrieve/connect -->
+        <anti-action application="answer"/>
+        <anti-action application="fifo" data="${destination_number}@store1.local out nowait"/>
+      </condition>
+    </extension>
 
-    <!-- Outbound calls via Store 1's Telnyx trunk -->
+    <!-- Outbound calls -->
     <extension name="outbound">
       <condition field="destination_number" expression="^(\+?1?\d{10})$">
         <action application="set" data="effective_caller_id_number=+17577828734"/>

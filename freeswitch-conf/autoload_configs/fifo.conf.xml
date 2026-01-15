@@ -3,8 +3,13 @@
     <param name="delete-all-outbound-member-on-startup" value="false"/>
   </settings>
   <fifos>
-    <fifo name="cool_fifo@$${domain}" importance="0">
-      <!--<member timeout="60" simo="1" lag="20">{member_wait=nowait}user/1005@$${domain}</member>-->
-    </fifo>
+    <!-- Store 1 parking slots -->
+    <fifo name="700@store1.local" importance="0"/>
+    <fifo name="701@store1.local" importance="0"/>
+    <fifo name="702@store1.local" importance="0"/>
+    <!-- Store 2 parking slots -->
+    <fifo name="700@store2.local" importance="0"/>
+    <fifo name="701@store2.local" importance="0"/>
+    <fifo name="702@store2.local" importance="0"/>
   </fifos>
 </configuration>

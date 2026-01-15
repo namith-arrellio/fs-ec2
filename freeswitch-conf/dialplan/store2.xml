@@ -11,6 +11,7 @@
     <!-- Park slots 700, 701, 702 with BLF support -->
    <extension name="park_slot">
       <condition field="destination_number" expression="^(70[0-9])$">
+        <action application="answer"/>
         <action application="set" data="fifo_music=local_stream://moh"/>
         <action application="valet_park" data="store2.local $1"/>
       </condition>

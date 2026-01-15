@@ -1,19 +1,33 @@
 <include>
-  <!-- Park slots for Store 1 -->
+  <!-- FIFO Park slots for Store 1 (transferred calls) -->
   <extension name="park_store1">
-  <condition field="${sip_refer_to}" expression="store1\.local"/>
-  <condition field="destination_number" expression="^(70[0-9])$">
-    <action application="set" data="fifo_music=local_stream://moh"/>
-    <action application="valet_park" data="store1.local $1"/>
-  </condition>
-</extension>
+    <condition field="${sip_refer_to}" expression="store1\.local"/>
+    <condition field="destination_number" expression="^(70[0-9])$" break="on-false">
+      <action inline="true" application="set" data="slot_count=${fifo(count $1@store1.local)}"/>
+      <action inline="true" application="set" data="slot_count=${slot_count:-9:2}"/>
+    </condition>
+    <condition field="${slot_count}" expression="^\:0$" break="always">
+      <action application="answer"/>
+      <action application="set" data="fifo_chime_freq=0"/>
+      <action application="fifo" data="${destination_number}@store1.local in undef local_stream://moh"/>
+      <anti-action application="answer"/>
+      <anti-action application="fifo" data="${destination_number}@store1.local out nowait"/>
+    </condition>
+  </extension>
 
-  <!-- Park slots for Store 2 -->
+  <!-- FIFO Park slots for Store 2 -->
   <extension name="park_store2">
     <condition field="${sip_refer_to}" expression="store2\.local"/>
-    <condition field="destination_number" expression="^(70[0-9])$">
-      <action application="set" data="fifo_music=local_stream://moh"/>
-      <action application="valet_park" data="store2.local $1"/>
+    <condition field="destination_number" expression="^(70[0-9])$" break="on-false">
+      <action inline="true" application="set" data="slot_count=${fifo(count $1@store2.local)}"/>
+      <action inline="true" application="set" data="slot_count=${slot_count:-9:2}"/>
+    </condition>
+    <condition field="${slot_count}" expression="^\:0$" break="always">
+      <action application="answer"/>
+      <action application="set" data="fifo_chime_freq=0"/>
+      <action application="fifo" data="${destination_number}@store2.local in undef local_stream://moh"/>
+      <anti-action application="answer"/>
+      <anti-action application="fifo" data="${destination_number}@store2.local out nowait"/>
     </condition>
   </extension>
 </include>
