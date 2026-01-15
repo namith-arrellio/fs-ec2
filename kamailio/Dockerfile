@@ -6,8 +6,10 @@ RUN apk add --no-cache \
     netcat-openbsd \
     bash
 
-# Create run directory
-RUN mkdir -p /var/run/kamailio && chown kamailio:kamailio /var/run/kamailio
+# Create kamailio user and run directory
+RUN addgroup -S kamailio && adduser -S -G kamailio kamailio && \
+    mkdir -p /var/run/kamailio && \
+    chown kamailio:kamailio /var/run/kamailio
 
 # Copy configuration
 COPY kamailio.cfg /etc/kamailio/kamailio.cfg
