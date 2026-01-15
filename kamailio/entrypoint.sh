@@ -1,30 +1,30 @@
 #!/bin/bash
 set -e
 
-# Wait for MySQL
+# Wait for MySQL/MariaDB
 echo "Waiting for MySQL..."
 /usr/local/bin/wait-for-mysql.sh 127.0.0.1
 
-# Check if database is initialized
-DB_EXISTS=$(mysql -h 127.0.0.1 -u root -proot -N -e "SHOW DATABASES LIKE 'kamailio'" 2>/dev/null | grep kamailio || true)
-
-if [ -z "$DB_EXISTS" ]; then
-    echo "Creating Kamailio database..."
-    
-    # Create database and user
-    mysql -h 127.0.0.1 -u root -proot <<EOF
-CREATE DATABASE IF NOT EXISTS kamailio;
+# Always ensure kamailio user exists
+echo "Ensuring kamailio user exists..."
+mysql -h 127.0.0.1 -u root -proot <<EOF
 CREATE USER IF NOT EXISTS 'kamailio'@'%' IDENTIFIED BY 'kamailiorw';
 CREATE USER IF NOT EXISTS 'kamailio'@'localhost' IDENTIFIED BY 'kamailiorw';
+CREATE USER IF NOT EXISTS 'kamailio'@'127.0.0.1' IDENTIFIED BY 'kamailiorw';
 CREATE USER IF NOT EXISTS 'kamailioro'@'%' IDENTIFIED BY 'kamailioro';
 GRANT ALL PRIVILEGES ON kamailio.* TO 'kamailio'@'%';
 GRANT ALL PRIVILEGES ON kamailio.* TO 'kamailio'@'localhost';
+GRANT ALL PRIVILEGES ON kamailio.* TO 'kamailio'@'127.0.0.1';
 GRANT SELECT ON kamailio.* TO 'kamailioro'@'%';
 FLUSH PRIVILEGES;
 EOF
 
-    # Initialize database schema using kamdbctl
-    echo "Initializing database schema..."
+# Check if database schema is initialized (check for a known table)
+TABLES_EXIST=$(mysql -h 127.0.0.1 -u kamailio -pkamailiorw kamailio -N -e "SHOW TABLES LIKE 'subscriber'" 2>/dev/null | grep subscriber || true)
+
+if [ -z "$TABLES_EXIST" ]; then
+    echo "Initializing Kamailio database schema..."
+    
     # Set environment for kamdbctl
     export DBENGINE=MYSQL
     export DBHOST=127.0.0.1
@@ -49,9 +49,9 @@ INSERT IGNORE INTO domain (domain) VALUES ('store1.local');
 INSERT IGNORE INTO domain (domain) VALUES ('store2.local');
 EOF
 
-    echo "Database initialized."
+    echo "Database schema initialized."
 else
-    echo "Database already exists."
+    echo "Database schema already exists."
 fi
 
 # Replace advertised IP in config
