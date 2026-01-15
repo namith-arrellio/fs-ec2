@@ -1,5 +1,0 @@
-<configuration name="valet_parking.conf" description="Valet Parking">
-  <settings>
-    <param name="manage-presence" value="true"/>
-  </settings>
-</configuration>

@@ -9,7 +9,7 @@
 
     <!-- Park slots 700, 701, 702 (toggle: park or retrieve) -->
    <extension name="park_slot">
-      <condition field="destination_number" expression="^(?:park\+)?(70[0-2])$">
+      <condition field="destination_number" expression="^(70[0-9])$">
         <action application="set" data="fifo_music=local_stream://moh"/>
         <action application="valet_park" data="store1 $1"/>
       </condition>
