@@ -1,7 +1,10 @@
 <configuration name="presence_map.conf" description="PRESENCE MAP">
   <domains>
-    <domain name="$${domain}">
-      <exten regex="3\d+" proto="conf"/>
+    <domain name="store1.local">
+      <exten regex="70\d" proto="fifo"/>
+    </domain>
+    <domain name="store2.local">
+      <exten regex="70\d" proto="fifo"/>
     </domain>
   </domains>
 </configuration>
