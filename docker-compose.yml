@@ -1,4 +1,36 @@
 services:
+  # MySQL database for Kamailio
+  mysql:
+    image: mysql:8.0
+    container_name: kamailio-mysql
+    network_mode: "host"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: kamailio
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Kamailio SIP Proxy (handles registration, presence, BLF)
+  kamailio:
+    build:
+      context: ./kamailio
+      dockerfile: Dockerfile
+    container_name: kamailio
+    network_mode: "host"
+    environment:
+      - ADVERTISED_IP=${ADVERTISED_IP:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # FreeSWITCH (media server, call handling, parking)
   freeswitch:
     build: .
     container_name: freeswitch-dev
@@ -15,14 +47,19 @@ services:
       - api
       - esl
 
+  # Flask API (dynamic user directory, gateway config)
   api:
     build: ./api
     container_name: freeswitch-api
     network_mode: "host"
     restart: unless-stopped
 
+  # ESL Call Router (handles call routing logic)
   esl:
     build: ./esl
     container_name: freeswitch-esl
     network_mode: "host"
     restart: unless-stopped
+
+volumes:
+  mysql_data:

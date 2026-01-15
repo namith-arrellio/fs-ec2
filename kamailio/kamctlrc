@@ -1,0 +1,38 @@
+# Kamailio control tool configuration
+
+# Database settings
+DBENGINE=MYSQL
+DBHOST=127.0.0.1
+DBPORT=3306
+DBNAME=kamailio
+DBRWUSER="kamailio"
+DBRWPW="kamailiorw"
+DBROUSER="kamailioro"
+DBROPW="kamailioro"
+DBROOTUSER="root"
+DBROOTPW="root"
+
+# Use character set
+CHARSET="utf8"
+
+# Database version table
+CTLENGINE="DBENG"
+INSTALL_EXTRA_TABLES=yes
+INSTALL_PRESENCE_TABLES=yes
+INSTALL_DBUID_TABLES=yes
+
+# SIP domain
+SIP_DOMAIN=kamailio.local
+
+# Aliases
+ALIASES=yes
+
+# Start delay
+STARTOPTIONS=
+
+# PIDs
+PID_FILE=/var/run/kamailio/kamailio.pid
+
+# Debug
+VERBOSE=3
+
