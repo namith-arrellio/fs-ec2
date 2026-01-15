@@ -168,8 +168,13 @@ def handle_esl_event(event):
     """Handle events from FreeSWITCH Inbound ESL"""
     global presence_publisher
 
-    event_name = event.get("Event-Name")
-    event_subclass = event.get("Event-Subclass")
+    # ESLEvent uses .headers dict to access header fields
+    headers = event.headers if hasattr(event, "headers") else {}
+
+    event_name = headers.get("Event-Name")
+    event_subclass = headers.get("Event-Subclass")
+
+    logger.debug(f"ESL Event: {event_name} / {event_subclass}")
 
     # Handle valet parking events
     if event_subclass and "valet_parking" in event_subclass:
@@ -187,12 +192,15 @@ def handle_park_event(event):
     if not presence_publisher:
         return
 
-    action = event.get("Action")
-    valet_lot = event.get("Valet-Lot-Name") or event.get("variable_valet_lot")
-    valet_extension = event.get("Valet-Extension") or event.get(
+    # ESLEvent uses .headers dict to access header fields
+    headers = event.headers if hasattr(event, "headers") else {}
+
+    action = headers.get("Action")
+    valet_lot = headers.get("Valet-Lot-Name") or headers.get("variable_valet_lot")
+    valet_extension = headers.get("Valet-Extension") or headers.get(
         "variable_valet_extension"
     )
-    caller_id = event.get("Caller-Caller-ID-Number", "Unknown")
+    caller_id = headers.get("Caller-Caller-ID-Number", "Unknown")
 
     if not valet_lot or not valet_extension:
         logger.debug(f"Ignoring park event without lot/extension info")
