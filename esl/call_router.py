@@ -241,6 +241,12 @@ def run_inbound_esl():
                 port=FREESWITCH_ESL_PORT,
                 password=FREESWITCH_ESL_PASSWORD,
             )
+
+            # Register event handler before connecting
+            def on_event(event):
+                gevent.spawn(handle_esl_event, event)
+
+            inbound.register_handle("*", on_event)
             inbound.connect()
             logger.info("✅ Connected to FreeSWITCH ESL")
 
@@ -249,11 +255,11 @@ def run_inbound_esl():
             inbound.send("event plain CHANNEL_ANSWER CHANNEL_HANGUP_COMPLETE")
             logger.info("📋 Subscribed to parking and channel events")
 
-            # Event loop
-            while True:
-                event = inbound.receive_event()
-                if event:
-                    gevent.spawn(handle_esl_event, event)
+            # Keep the connection alive - greenswitch handles events via callbacks
+            while inbound.connected:
+                gevent.sleep(1)
+
+            logger.warning("ESL connection lost")
 
         except Exception as e:
             logger.error(f"ESL connection error: {e}")

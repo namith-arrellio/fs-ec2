@@ -138,7 +138,7 @@ def generate_sofia_conf_xml():
           <settings>
             <param name="context" value="public"/>
             <param name="rfc2833-pt" value="101"/>
-            <param name="sip-port" value="5060"/>
+            <param name="sip-port" value="5070"/>
             <param name="dialplan" value="XML"/>
             <param name="dtmf-duration" value="2000"/>
             <param name="inbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
