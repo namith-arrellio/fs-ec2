@@ -1,4 +1,4 @@
-FROM ghcr.io/kamailio/kamailio-ci:5.8-alpine
+FROM ghcr.io/kamailio/kamailio-ci:latest-alpine
 
 # Install additional packages (Alpine uses apk, not apt-get)
 RUN apk add --no-cache \
