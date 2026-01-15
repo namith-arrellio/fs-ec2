@@ -1,74 +1,35 @@
 <!--
-    NOTICE:
-
-    This context is usually accessed via the external sip profile listening on port 5080.
+    PUBLIC CONTEXT - Inbound calls from SIP trunks (Telnyx)
     
-    It is recommended to have separate inbound and outbound contexts.  Not only for security
-    but clearing up why you would need to do such a thing.  You don't want outside un-authenticated
-    callers hitting your default context which allows dialing calls thru your providers and results 
-    in Toll Fraud.
+    All inbound calls are routed to ESL (call_router.py) for handling.
+    This is a static dialplan for reliability - no XML CURL dependency.
 -->
-
-<!-- http://wiki.freeswitch.org/wiki/Dialplan_XML -->
 <include>
   <context name="public">
 
+    <!-- Prevent routing loops -->
     <extension name="unloop">
       <condition field="${unroll_loops}" expression="^true$"/>
       <condition field="${sip_looped_call}" expression="^true$">
-	<action application="deflect" data="${destination_number}"/>
+        <action application="deflect" data="${destination_number}"/>
       </condition>
     </extension>
-    <!--
-	Tag anything pass thru here as an outside_call so you can make sure not
-	to create any routing loops based on the conditions that it came from 
-	the outside of the switch.  
-    -->
+
+    <!-- Tag as outside call for routing logic -->
     <extension name="outside_call" continue="true">
       <condition>
-	<action application="set" data="outside_call=true"/>
-	<action application="export" data="RFC2822_DATE=${strftime(%a, %d %b %Y %T %z)}"/>
+        <action application="set" data="outside_call=true"/>
+        <action application="set" data="call_direction=inbound"/>
+        <action application="export" data="RFC2822_DATE=${strftime(%a, %d %b %Y %T %z)}"/>
       </condition>
     </extension>
 
-    <extension name="call_debug" continue="true">
-      <condition field="${call_debug}" expression="^true$" break="never">
-	<action application="info"/>
+    <!-- Route ALL inbound calls to ESL for handling -->
+    <extension name="inbound_to_esl">
+      <condition field="destination_number" expression="^(.*)$">
+        <action application="socket" data="127.0.0.1:5002 async full"/>
       </condition>
     </extension>
 
-    <extension name="public_extensions">
-      <condition field="destination_number" expression="^(10[01][0-9])$">
-	<action application="transfer" data="$1 XML default"/>
-      </condition>
-    </extension>
-
-    <extension name="public_conference_extensions">
-      <condition field="destination_number" expression="^(3[5-8][01][0-9])$">
-	<action application="transfer" data="$1 XML default"/>
-      </condition>
-    </extension>
-    
-    <!--
-	You can place files in the public directory to get included.
-    -->
-    <X-PRE-PROCESS cmd="include" data="public/*.xml"/>
-    <!--
-	If you have made it this far lets challenge the caller and if they authenticate
-	lets try what they dialed in the default context. (commented out by default)
-    -->
-    <!--
-    <extension name="check_auth" continue="true">
-      <condition field="${sip_authorized}" expression="^true$" break="never">
-	<anti-action application="respond" data="407"/>
-      </condition>
-    </extension>
-    
-    <extension name="transfer_to_default">
-      <condition>
-	<action application="transfer" data="${destination_number} XML default"/>
-      </condition>
-    </extension>
-    -->
   </context>
 </include>

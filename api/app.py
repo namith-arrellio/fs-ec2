@@ -111,9 +111,6 @@ GATEWAYS = {
     # Add more gateways dynamically here
 }
 
-ESL_HOST = "127.0.0.1"
-ESL_PORT = "5002"
-
 
 def not_found_xml():
     return """<?xml version="1.0" encoding="UTF-8"?>
@@ -286,34 +283,6 @@ def generate_park_slot_xml(domain, slot_id):
 </document>"""
 
 
-def generate_dialplan_xml(context, store_data=None, store_domain=None):
-    """Dialplan with dynamic park slots + ESL routing"""
-    lot_name = store_domain or context
-
-    park_regex = "|".join(store_data["park_slots"])
-    print(f"PARK_REGEX: {park_regex}")
-
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<document type="freeswitch/xml">
-  <section name="dialplan">
-    <context name="{context}">
-      <extension name="park_slot">
-        <condition field="destination_number" expression="^({park_regex})$">
-          <action application="set" data="fifo_music=local_stream://moh"/>
-          <action application="set" data="presence_id=$1@{lot_name}"/>
-          <action application="valet_park" data="{lot_name} $1"/>
-        </condition>
-      </extension>
-      <extension name="esl_routing">
-        <condition field="destination_number" expression="^(.*)$">
-          <action application="socket" data="{ESL_HOST}:{ESL_PORT} async full"/>
-        </condition>
-      </extension>
-    </context>
-  </section>
-</document>"""
-
-
 @app.route("/freeswitch", methods=["POST"])
 def freeswitch_handler():
     section = request.form.get("section", "")
@@ -351,21 +320,7 @@ def freeswitch_handler():
         )
         return Response(xml, mimetype="text/xml")
 
-    # DIALPLAN
-    elif section == "dialplan":
-        context = request.form.get("Caller-Context", "")
-        logger.info(f"Dialplan: context={context}")
-
-        # Find store by context
-        for store_domain, store_data in STORES.items():
-            if store_data["context"] == context:
-                xml = generate_dialplan_xml(context, store_data, store_domain)
-                return Response(xml, mimetype="text/xml")
-
-        # Public or unknown - no park slots, just ESL
-        xml = generate_dialplan_xml(context)
-        return Response(xml, mimetype="text/xml")
-
+    # CONFIGURATION (sofia.conf for gateways)
     elif section == "configuration":
         key_value = request.form.get("key_value", "")
         logger.info(f"Configuration request: {key_value}")
