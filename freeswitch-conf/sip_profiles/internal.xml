@@ -99,15 +99,17 @@
     <param name="sip-ip" value="$${local_ip_v4}"/>
     <param name="hold-music" value="$${hold_music}"/>
     <param name="apply-nat-acl" value="nat.auto"/>
-
+    
+    <!-- NAT handling - detect and fix RTP going to wrong IP -->
+    <param name="aggressive-nat-detection" value="true"/>
+    <param name="NDLB-force-rport" value="true"/>
+    
+    <!-- Auto-adjust RTP destination based on where packets actually come from -->
+    <param name="rtp-autofix-timing" value="true"/>
+    <param name="auto-rtp-bugs" value="clear"/>
 
     <!-- (default true) set to false if you do not wish to have called party info in 1XX responses -->
     <!-- <param name="cid-in-1xx" value="false"/> -->
-
-    <!-- extended info parsing -->
-    <!-- <param name="extended-info-parsing" value="true"/> -->
-
-    <!--<param name="aggressive-nat-detection" value="true"/>-->
     <!--
         There are known issues (asserts and segfaults) when 100rel is enabled.
         It is not recommended to enable 100rel at this time.
@@ -301,6 +303,10 @@
     <param name="enable-rport" value="true"/>
     <param name="aggressive-nat-detection" value="true"/>
     <param name="apply-nat-acl" value="rfc1918.auto"/>
+    
+    <!-- Auto-adjust RTP destination to where packets actually come from -->
+    <!-- Critical for phones behind NAT that send wrong IP in SDP -->
+    <param name="rtp-auto-adjust" value="true"/>
 
     <!-- rtp inactivity timeout -->
     <param name="rtp-timeout-sec" value="300"/>
