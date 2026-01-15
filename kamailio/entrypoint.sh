@@ -8,6 +8,7 @@ echo "Waiting for MySQL..."
 # Always ensure kamailio user exists
 echo "Ensuring kamailio user exists..."
 mysql -h 127.0.0.1 -u root -proot <<EOF
+CREATE DATABASE IF NOT EXISTS kamailio;
 CREATE USER IF NOT EXISTS 'kamailio'@'%' IDENTIFIED BY 'kamailiorw';
 CREATE USER IF NOT EXISTS 'kamailio'@'localhost' IDENTIFIED BY 'kamailiorw';
 CREATE USER IF NOT EXISTS 'kamailio'@'127.0.0.1' IDENTIFIED BY 'kamailiorw';
@@ -20,7 +21,7 @@ FLUSH PRIVILEGES;
 EOF
 
 # Check if database schema is initialized (check for a known table)
-TABLES_EXIST=$(mysql -h 127.0.0.1 -u kamailio -pkamailiorw kamailio -N -e "SHOW TABLES LIKE 'subscriber'" 2>/dev/null | grep subscriber || true)
+TABLES_EXIST=$(mysql -h 127.0.0.1 -u kamailio -pkamailiorw kamailio -N -e "SHOW TABLES LIKE 'version'" 2>/dev/null | grep version || true)
 
 if [ -z "$TABLES_EXIST" ]; then
     echo "Initializing Kamailio database schema..."
@@ -39,20 +40,29 @@ if [ -z "$TABLES_EXIST" ]; then
     export INSTALL_EXTRA_TABLES=yes
     export INSTALL_PRESENCE_TABLES=yes
     
+    # Drop and recreate database to ensure clean state
+    echo "Dropping and recreating database..."
+    mysql -h 127.0.0.1 -u root -proot -e "DROP DATABASE IF EXISTS kamailio; CREATE DATABASE kamailio;"
+    mysql -h 127.0.0.1 -u root -proot -e "GRANT ALL PRIVILEGES ON kamailio.* TO 'kamailio'@'%'; FLUSH PRIVILEGES;"
+    
     # Create tables (answer yes to prompts)
-    echo "y" | kamdbctl create || echo "Database tables may already exist"
-
-    # Create default domains
-    echo "Creating domains..."
-    mysql -h 127.0.0.1 -u kamailio -pkamailiorw kamailio <<EOF
-INSERT IGNORE INTO domain (domain) VALUES ('store1.local');
-INSERT IGNORE INTO domain (domain) VALUES ('store2.local');
-EOF
+    echo "Creating Kamailio tables..."
+    echo "y" | kamdbctl create
+    
+    if [ $? -ne 0 ]; then
+        echo "kamdbctl create failed, trying reinit..."
+        echo "y" | kamdbctl reinit || true
+    fi
 
     echo "Database schema initialized."
 else
     echo "Database schema already exists."
 fi
+
+# Create default domains (ignore errors if they exist)
+echo "Ensuring domains exist..."
+mysql -h 127.0.0.1 -u kamailio -pkamailiorw kamailio -e "INSERT IGNORE INTO domain (domain) VALUES ('store1.local');" 2>/dev/null || true
+mysql -h 127.0.0.1 -u kamailio -pkamailiorw kamailio -e "INSERT IGNORE INTO domain (domain) VALUES ('store2.local');" 2>/dev/null || true
 
 # Replace advertised IP in config
 if [ -n "$ADVERTISED_IP" ]; then
