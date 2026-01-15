@@ -44,10 +44,8 @@ EOF
     echo "Creating dispatcher entries for SIP trunks..."
     mysql -h 127.0.0.1 -u root -proot kamailio <<EOF
 -- Dispatcher Group 1: Telnyx SIP Trunk
--- Telnyx provides multiple SIP endpoints for redundancy
 INSERT IGNORE INTO dispatcher (setid, destination, flags, priority, attrs, description) VALUES
-(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=50', 'Telnyx Primary'),
-(1, 'sip:sip2.telnyx.com:5060', 0, 1, 'weight=50', 'Telnyx Secondary');
+(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=100', 'Telnyx Primary');
 EOF
 
     echo "Database initialized successfully!"
@@ -57,9 +55,11 @@ else
     # Ensure dispatcher entries exist (idempotent)
     echo "Ensuring dispatcher entries exist..."
     mysql -h 127.0.0.1 -u root -proot kamailio <<EOF
+-- Remove old invalid entry if exists
+DELETE FROM dispatcher WHERE destination LIKE '%sip2.telnyx%';
+-- Add primary trunk
 INSERT IGNORE INTO dispatcher (setid, destination, flags, priority, attrs, description) VALUES
-(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=50', 'Telnyx Primary'),
-(1, 'sip:sip2.telnyx.com:5060', 0, 1, 'weight=50', 'Telnyx Secondary');
+(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=100', 'Telnyx Primary');
 EOF
 fi
 
