@@ -23,18 +23,6 @@ STORES = {
         "context": "store1",
         "extensions": ["1000", "1001"],
         "ring_group": ["1000", "1001"],
-        "park_slots": [
-            "700",
-            "701",
-            "702",
-            "703",
-            "704",
-            "705",
-            "706",
-            "707",
-            "708",
-            "709",
-        ],
     },
     "store2.local": {
         "did_variants": ["7372449688", "17372449688", "+17372449688"],
@@ -43,18 +31,6 @@ STORES = {
         "context": "store2",
         "extensions": ["1000", "1001"],
         "ring_group": ["1000", "1001"],
-        "park_slots": [
-            "700",
-            "701",
-            "702",
-            "703",
-            "704",
-            "705",
-            "706",
-            "707",
-            "708",
-            "709",
-        ],
     },
 }
 
@@ -165,9 +141,8 @@ class CallHandler:
     def handle_park(self, called, caller, context):
         if context in CONTEXT_TO_STORE:
             store_domain = CONTEXT_TO_STORE[context]
-            store = STORES[store_domain]
         else:
-            store_domain, store = find_store_for_call(self.session.session_data)
+            store_domain, _ = find_store_for_call(self.session.session_data)
 
         # Use store_domain as lot name - this ensures BLF presence works
         # Phones subscribe to 700@store1.local, valet_park publishes to same

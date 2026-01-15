@@ -1,6 +1,5 @@
 from flask import Flask, request, Response
 import logging
-import re
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -17,18 +16,6 @@ STORES = {
         "gateway": "telnyx_store1",
         "caller_id": "+17577828734",
         "context": "store1",
-        "park_slots": [
-            "700",
-            "701",
-            "702",
-            "703",
-            "704",
-            "705",
-            "706",
-            "707",
-            "708",
-            "709",
-        ],
         "users": {
             "1000": {
                 "password": "123456",
@@ -50,18 +37,6 @@ STORES = {
         "gateway": "telnyx_store2",
         "caller_id": "+17372449688",
         "context": "store2",
-        "park_slots": [
-            "700",
-            "701",
-            "702",
-            "703",
-            "704",
-            "705",
-            "706",
-            "707",
-            "708",
-            "709",
-        ],
         "users": {
             "1000": {
                 "password": "123456",
@@ -262,27 +237,6 @@ def generate_user_xml(domain, user_id, user_data, store_data):
 </document>"""
 
 
-def generate_park_slot_xml(domain, slot_id):
-    """Generate directory entry for park slot BLF subscriptions"""
-    slot = re.sub(r"^park\+", "", slot_id)
-    presence = f"{slot}@{domain}"
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<document type="freeswitch/xml">
-  <section name="directory">
-    <domain name="{domain}">
-      <user id="{slot_id}">
-        <params>
-          <param name="dial-string" value="error/user_not_registered"/>
-        </params>
-        <variables>
-          <variable name="presence_id" value="{presence}"/>
-        </variables>
-      </user>
-    </domain>
-  </section>
-</document>"""
-
-
 @app.route("/freeswitch", methods=["POST"])
 def freeswitch_handler():
     section = request.form.get("section", "")
@@ -301,14 +255,7 @@ def freeswitch_handler():
 
         store_data = STORES[lookup_domain]
 
-        # # Check if this is a park slot lookup (for BLF subscriptions)
-        # if is_park_slot_user(user, store_data):
-        #     domain = response_domain or lookup_domain
-        #     logger.info(f"Park slot directory lookup: {user}@{domain}")
-        #     xml = generate_park_slot_xml(domain, user)
-        #     return Response(xml, mimetype="text/xml")
-
-        # Regular user lookup
+        # User lookup
         if user not in store_data["users"]:
             return Response(not_found_xml(), mimetype="text/xml")
 
