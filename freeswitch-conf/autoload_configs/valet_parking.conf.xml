@@ -1,0 +1,6 @@
+<configuration name="valet_parking.conf" description="Valet Parking">
+  <settings>
+    <!-- Enable presence for BLF -->
+    <param name="presence-provider" value="true"/>
+  </settings>
+</configuration>
