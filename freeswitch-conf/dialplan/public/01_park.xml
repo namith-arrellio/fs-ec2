@@ -1,12 +1,14 @@
 <include>
   <!-- Park slots for Store 1 -->
   <extension name="park_store1">
-    <condition field="${sip_refer_to}" expression="store1\.local"/>
-    <condition field="destination_number" expression="^(70[0-9])$">
-      <action application="set" data="fifo_music=local_stream://moh"/>
-      <action application="valet_park" data="store1.local $1"/>
-    </condition>
-  </extension>
+  <condition field="${sip_refer_to}" expression="store1\.local"/>
+  <condition field="destination_number" expression="^(70[0-9])$">
+    <action application="answer"/>
+    <action application="set" data="presence_id=$1@store1.local"/>
+    <action application="set" data="fifo_music=local_stream://moh"/>
+    <action application="valet_park" data="store1.local $1"/>
+  </condition>
+</extension>
 
   <!-- Park slots for Store 2 -->
   <extension name="park_store2">
