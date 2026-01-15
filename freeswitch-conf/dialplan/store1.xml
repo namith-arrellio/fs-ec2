@@ -1,10 +1,3 @@
-<!--
-    STORE1 CONTEXT - Internal calls for store1.local domain
-    
-    Handles:
-    - Park slots (700-709) with BLF presence
-    - All other calls routed to ESL (call_router.py)
--->
 <include>
   <context name="store1">
 
@@ -12,8 +5,7 @@
     <extension name="park_slot">
       <condition field="destination_number" expression="^(70[0-9])$">
         <action application="set" data="fifo_music=local_stream://moh"/>
-        <action application="set" data="presence_id=$1@store1.local"/>
-        <action application="valet_park" data="store1.local $1"/>
+        <action application="valet_park" data="store1 $1"/>
       </condition>
     </extension>
 
