@@ -11,7 +11,7 @@
    <extension name="park_slot">
       <condition field="destination_number" expression="^(70[0-9])$">
         <action application="set" data="fifo_music=local_stream://moh"/>
-        <action application="valet_park" data="store1.local $1"/>
+        <action application="valet_park" data="store1 $1"/>
       </condition>
     </extension>
 

@@ -4,7 +4,7 @@
     <condition field="${sip_refer_to}" expression="store1\.local"/>
     <condition field="destination_number" expression="^(70[0-9])$">
       <action application="set" data="fifo_music=local_stream://moh"/>
-      <action application="valet_park" data="store1.local $1"/>
+      <action application="valet_park" data="store1 $1"/>
     </condition>
   </extension>
 
@@ -13,7 +13,7 @@
     <condition field="${sip_refer_to}" expression="store2\.local"/>
     <condition field="destination_number" expression="^(70[0-9])$">
       <action application="set" data="fifo_music=local_stream://moh"/>
-      <action application="valet_park" data="store2.local $1"/>
+      <action application="valet_park" data="store2 $1"/>
     </condition>
   </extension>
 </include>
