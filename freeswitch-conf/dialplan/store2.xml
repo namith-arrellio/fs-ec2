@@ -1,18 +1,18 @@
 <include>
   <context name="store2">
-    <!-- Internal extension dialing -->
+    <!-- Internal extension dialing - route through Kamailio -->
     <extension name="local_extension">
       <condition field="destination_number" expression="^(10[01][0-9])$">
-        <action application="bridge" data="user/$1@store2.local"/>
+        <action application="set" data="sip_invite_domain=store2.local"/>
+        <action application="bridge" data="sofia/internal/$1@127.0.0.1:5060"/>
       </condition>
     </extension>
 
-    <!-- Park slots 700, 701, 702 (toggle: park or retrieve) -->
-    <!-- Park slots 700, 701, 702 with BLF support -->
-   <extension name="park_slot">
+    <!-- Park slots 700-709 using valet_park with BLF -->
+    <extension name="park_slot">
       <condition field="destination_number" expression="^(70[0-9])$">
         <action application="answer"/>
-        <action application="set" data="fifo_music=local_stream://moh"/>
+        <action application="set" data="presence_id=$1@store2.local"/>
         <action application="valet_park" data="store2.local $1"/>
       </condition>
     </extension>

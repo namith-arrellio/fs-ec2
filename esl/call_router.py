@@ -281,7 +281,7 @@ def run_inbound_esl():
 
 
 def get_route_from_backend(called_number, caller_id):
-    """Hardcoded routing logic - no database"""
+    """Hardcoded routing logic - route through Kamailio"""
     normalized = (
         called_number.replace("+1", "")
         .replace("-", "")
@@ -289,14 +289,22 @@ def get_route_from_backend(called_number, caller_id):
         .replace("+", "")
     )
 
+    # Kamailio address for routing to registered phones
+    KAMAILIO_ADDR = "127.0.0.1:5060"
+
     for domain, config in STORES.items():
         if normalized == config["did"] or called_number == f"1{config['did']}":
             logger.info(f"Routing call to {domain}: {called_number}")
+            # Route through Kamailio to reach registered phones
             return {
                 "action": "bridge",
-                "targets": [f"user/{ext}@{domain}" for ext in config["ring_group"]],
+                "targets": [
+                    f"sofia/internal/{ext}@{KAMAILIO_ADDR}"
+                    for ext in config["ring_group"]
+                ],
                 "context": config["context"],
                 "domain": domain,
+                "sip_invite_domain": domain,  # Tell FreeSWITCH which domain this is for
             }
 
     return {"action": "reject", "reason": "No route found for " + called_number}
@@ -342,6 +350,10 @@ class InboundCallHandler(object):
         if route["action"] == "bridge":
             # Set channel variables using call_command instead of setVariable
             self.session.call_command("set", f"domain_name={route['domain']}")
+            self.session.call_command(
+                "set",
+                f"sip_invite_domain={route.get('sip_invite_domain', route['domain'])}",
+            )
             self.session.call_command("set", "ringback=${us-ring}")
             self.session.call_command("set", "call_timeout=30")
             self.session.call_command("set", "hangup_after_bridge=true")
@@ -352,7 +364,7 @@ class InboundCallHandler(object):
             gevent.sleep(0.5)
 
             targets = ",".join(route["targets"])
-            bridge_string = f"{{leg_timeout=30,ignore_early_media=true}}{targets}"
+            bridge_string = f"{{leg_timeout=30,ignore_early_media=true,sip_invite_domain={route['domain']}}}{targets}"
             logger.info(f"Bridging to: {targets}")
 
             self.session.bridge(bridge_string, block=False)
