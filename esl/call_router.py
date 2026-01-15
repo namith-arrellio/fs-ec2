@@ -427,25 +427,25 @@ class InboundCallHandler(object):
             self.session.call_command("set", "hangup_after_bridge=true")
             self.session.call_command("set", "continue_on_fail=true")
 
-            self.session.answer()
-            logger.debug("answered")
-            gevent.sleep(0.5)
+            # Don't answer yet - pass early media (ringing) back to caller
+            # The call will be answered when the phone picks up
 
             targets = ",".join(route["targets"])
             # Include X-Store-Domain header so Kamailio knows which domain for location lookup
-            bridge_string = f"{{leg_timeout=30,ignore_early_media=true,sip_invite_domain={route['domain']},sip_h_X-Store-Domain={route['domain']}}}{targets}"
+            bridge_string = f"{{leg_timeout=30,ignore_early_media=false,sip_invite_domain={route['domain']},sip_h_X-Store-Domain={route['domain']}}}{targets}"
             logger.info(
                 f"Bridging to (via Kamailio): {targets} with domain {route['domain']}"
             )
 
-            self.session.bridge(bridge_string, block=False)
-            logger.info("✓ Bridge command sent")
+            # IMPORTANT: block=True keeps ESL session alive until bridge completes
+            self.session.bridge(bridge_string, block=True)
+            logger.info("✓ Bridge completed (call ended)")
 
         elif route["action"] == "reject":
             logger.info(f"✗ Rejecting: {route.get('reason')}")
             self.session.hangup(route.get("reason", "CALL_REJECTED"))
 
-        # Close the socket
+        # Close the socket only after call is done
         self.session.stop()
 
     def _get_store_from_did(self, did):
