@@ -1,9 +1,9 @@
 <configuration name="xml_curl.conf" description="cURL XML Gateway">
   <bindings>
     <binding name="dynamic_config">
-      <!-- Only directory (auth/registration) and configuration (sofia gateways) are dynamic -->
-      <!-- Dialplan is static for reliability - see dialplan/*.xml files -->
-      <param name="gateway-url" value="http://127.0.0.1:5000/freeswitch" bindings="directory|configuration"/>
+      <!-- Only directory (auth/registration) is dynamic -->
+      <!-- Sofia profiles and dialplan are static for reliability -->
+      <param name="gateway-url" value="http://127.0.0.1:5000/freeswitch" bindings="directory"/>
       <param name="timeout" value="5"/>
     </binding>
   </bindings>
