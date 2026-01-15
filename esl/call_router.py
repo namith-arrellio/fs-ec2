@@ -5,225 +5,116 @@ monkey.patch_all()
 
 import gevent
 import greenswitch
-from greenswitch.esl import OutboundSessionHasGoneAway
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-# =============================================================================
-# STORE CONFIGURATION
-# =============================================================================
-
-STORES = {
-    "store1.local": {
-        "did": "7577828734",  # Normalized DID (10 digits)
-        "gateway": "telnyx_store1",
-        "caller_id": "+17577828734",
-        "context": "store1",
-        "extensions": ["1000", "1001"],
-        "ring_group": ["1000", "1001"],
-    },
-    "store2.local": {
-        "did": "7372449688",
-        "gateway": "telnyx_store2",
-        "caller_id": "+17372449688",
-        "context": "store2",
-        "extensions": ["1000", "1001"],
-        "ring_group": ["1000", "1001"],
-    },
-}
-
-# Build lookup maps at startup
-DID_TO_STORE = {store["did"]: domain for domain, store in STORES.items()}
-CONTEXT_TO_STORE = {store["context"]: domain for domain, store in STORES.items()}
+logging.basicConfig(level=logging.DEBUG)  # DEBUG for troubleshooting
 
 
-def normalize_number(number):
-    """Strip +1, spaces, dashes to get 10-digit number"""
-    if not number:
-        return ""
-    return (
-        number.replace("+1", "")
-        .replace("+", "")
+def get_route_from_backend(called_number, caller_id):
+    """Hardcoded routing logic - no database"""
+    normalized = (
+        called_number.replace("+1", "")
         .replace("-", "")
         .replace(" ", "")
-        .lstrip("1")
+        .replace("+", "")
     )
 
+    if normalized == "7577828734" or called_number == "17577828734":
+        logging.info(f"Routing call to Store 1: {called_number}")
+        return {
+            "action": "bridge",
+            "targets": ["user/1000@store1.local", "user/1001@store1.local"],
+            "context": "store1",
+            "domain": "store1.local",
+        }
 
-def format_outbound_number(number):
-    """Format number for outbound dialing via Telnyx"""
-    normalized = normalize_number(number)
-    if len(normalized) == 10:
-        return f"+1{normalized}"
-    return f"+{normalized}"
+    if normalized == "7372449688" or called_number == "17372449688":
+        logging.info(f"Routing call to Store 2: {called_number}")
+        return {
+            "action": "bridge",
+            "targets": ["user/1000@store2.local", "user/1001@store2.local"],
+            "context": "store2",
+            "domain": "store2.local",
+        }
+
+    return {"action": "reject", "reason": "No route found for " + called_number}
 
 
-class CallHandler:
-    """Handle all calls from FreeSWITCH via Outbound ESL"""
+class InboundCallHandler(object):
+    """Handle inbound calls from FreeSWITCH via Outbound ESL"""
 
     def __init__(self, session):
         self.session = session
-        logger.info("🔌 New ESL connection")
+        logging.info("🔌 New FreeSWITCH connection received!")
 
     def run(self):
-        """Main entry point - called by greenswitch for each connection"""
+        """Main function called when FreeSWITCH connects for a call"""
         try:
             self.handle_call()
-        except OutboundSessionHasGoneAway:
-            logger.info("📴 Call ended or transferred")
-        except Exception as e:
-            logger.exception(f"Error handling call: {e}")
-        finally:
+        except:
+            logging.exception("Exception raised when handling call")
             self.session.stop()
 
     def handle_call(self):
-        """Route call based on context"""
+        """Process the inbound call"""
+        # CRITICAL: Subscribe to events for this call
         self.session.myevents()
+        logging.debug("myevents sent")
+
+        # Keep receiving events even after hangup
         self.session.linger()
+        logging.debug("linger sent")
 
-        # Get call info
-        called = self.session.session_data.get("Caller-Destination-Number", "")
-        caller = self.session.session_data.get("Caller-Caller-ID-Number", "")
-        context = self.session.session_data.get("Caller-Context", "")
-        uuid = self.session.session_data.get("Unique-ID", "")[:8]
+        # Get call variables from session_data (populated by connect())
+        # Note: Variable names differ from ESL inbound mode!
+        called_number = self.session.session_data.get("Caller-Destination-Number")
+        caller_id = self.session.session_data.get("Caller-Caller-ID-Number")
+        uuid = self.session.session_data.get("Unique-ID")
+        profile = self.session.session_data.get("variable_sip_profile_name", "")
 
-        logger.info(f"📞 {caller} → {called} | Context: {context} | UUID: {uuid}")
+        logging.info(f"📞 Inbound call: {caller_id} -> {called_number} (UUID: {uuid})")
 
-        # Route based on context
-        if context == "public":
-            # Inbound from Telnyx SIP trunk
-            self.handle_inbound(called, caller)
-        elif context in CONTEXT_TO_STORE:
-            # From a registered Yealink phone
-            self.handle_internal(called, caller, context)
-        else:
-            logger.warning(f"Unknown context: {context}")
-            self.session.hangup("CALL_REJECTED")
+        # Get routing decision
+        route = get_route_from_backend(called_number, caller_id)
+        logging.info(f"Routing decision: {route['action']}")
 
-    # =========================================================================
-    # INBOUND: Telnyx → Yealink phones
-    # =========================================================================
+        if route["action"] == "bridge":
+            # Set channel variables using call_command instead of setVariable
+            self.session.call_command("set", f"domain_name={route['domain']}")
+            self.session.call_command("set", "ringback=${us-ring}")
+            self.session.call_command("set", "call_timeout=30")
+            self.session.call_command("set", "hangup_after_bridge=true")
+            self.session.call_command("set", "continue_on_fail=true")
 
-    def handle_inbound(self, called, caller):
-        """Route inbound PSTN call to store's ring group"""
-        normalized_did = normalize_number(called)
-        store_domain = DID_TO_STORE.get(normalized_did)
-
-        if not store_domain:
-            logger.warning(
-                f"❌ No store for DID: {called} (normalized: {normalized_did})"
-            )
-            self.session.hangup("UNALLOCATED_NUMBER")
-            return
-
-        store = STORES[store_domain]
-        logger.info(f"🏪 Inbound call → {store_domain}")
-
-        # Set channel variables
-        self.session.call_command("set", f"domain_name={store_domain}")
-        self.session.call_command("set", "ringback=${us-ring}")
-        self.session.call_command("set", "call_timeout=30")
-        self.session.call_command("set", "hangup_after_bridge=true")
-        self.session.call_command("set", "continue_on_fail=true")
-
-        # Build ring group dial string
-        targets = ",".join(
-            [f"user/{ext}@{store_domain}" for ext in store["ring_group"]]
-        )
-        bridge_string = f"{{leg_timeout=30,ignore_early_media=true}}{targets}"
-
-        logger.info(f"🔔 Ringing: {targets}")
-
-        try:
-            self.session.bridge(bridge_string)
-        except OutboundSessionHasGoneAway:
-            logger.info("📴 Call transferred during bridge")
-            return
-
-        # Check if bridge failed (no answer, busy, etc.)
-        disposition = self.session.session_data.get(
-            "variable_originate_disposition", ""
-        )
-        if disposition not in ["SUCCESS", "ORIGINATOR_CANCEL"]:
-            logger.info(f"Bridge result: {disposition} → voicemail")
-            self._send_to_voicemail(store_domain, store["ring_group"][0])
-
-    def _send_to_voicemail(self, domain, extension):
-        """Send caller to voicemail after failed bridge"""
-        try:
-            self.session.call_command("answer")
+            self.session.answer()
+            logging.debug("answered")
             gevent.sleep(0.5)
-            self.session.call_command("voicemail", f"default {domain} {extension}")
-        except OutboundSessionHasGoneAway:
-            logger.info("📴 Caller hung up before voicemail")
 
-    # =========================================================================
-    # INTERNAL: Yealink phone → extension or PSTN
-    # =========================================================================
+            targets = ",".join(route["targets"])
+            bridge_string = f"{{leg_timeout=30,ignore_early_media=true}}{targets}"
+            logging.info(f"Bridging to: {targets}")
 
-    def handle_internal(self, called, caller, context):
-        """Route call from registered phone (extension or outbound)"""
-        store_domain = CONTEXT_TO_STORE[context]
-        store = STORES[store_domain]
+            self.session.bridge(bridge_string, block=False)
+            logging.info("✓ Bridge command sent")
 
-        # Check if calling another extension
-        if called in store["extensions"]:
-            self._bridge_to_extension(called, store_domain)
-            return
+        elif route["action"] == "reject":
+            logging.info(f"✗ Rejecting: {route.get('reason')}")
+            self.session.hangup(route.get("reason", "CALL_REJECTED"))
 
-        # Check if outbound call (10+ digits)
-        if len(called) >= 10:
-            self._bridge_outbound(called, store)
-            return
+        # Close the socket
+        self.session.stop()
 
-        logger.warning(f"❓ Unknown destination: {called}")
-        self.session.hangup("UNALLOCATED_NUMBER")
-
-    def _bridge_to_extension(self, extension, domain):
-        """Bridge to another extension in the same store"""
-        logger.info(f"📱 Extension call → {extension}@{domain}")
-
-        self.session.call_command("set", "ringback=${us-ring}")
-        self.session.call_command("set", "call_timeout=30")
-        self.session.call_command("set", "hangup_after_bridge=true")
-
-        try:
-            self.session.bridge(f"user/{extension}@{domain}")
-        except OutboundSessionHasGoneAway:
-            logger.info("📴 Call ended during bridge")
-
-    def _bridge_outbound(self, called, store):
-        """Bridge outbound call via Telnyx gateway"""
-        dial_number = format_outbound_number(called)
-        logger.info(f"📤 Outbound → {dial_number} via {store['gateway']}")
-
-        self.session.call_command(
-            "set", f"effective_caller_id_number={store['caller_id']}"
-        )
-        self.session.call_command("set", "hangup_after_bridge=true")
-
-        try:
-            self.session.bridge(f"sofia/gateway/{store['gateway']}/{dial_number}")
-        except OutboundSessionHasGoneAway:
-            logger.info("📴 Call ended during outbound bridge")
-
-
-# =============================================================================
-# MAIN
-# =============================================================================
 
 if __name__ == "__main__":
-    logger.info("🚀 ESL Call Router starting on 0.0.0.0:5002...")
-    logger.info(f"📋 Configured stores: {list(STORES.keys())}")
-    logger.info(f"📋 DID mappings: {DID_TO_STORE}")
+    logging.info("Starting OutboundESLServer on 0.0.0.0:5002...")
+    logging.info("Waiting for FreeSWITCH connections...")
 
     server = greenswitch.OutboundESLServer(
         bind_address="0.0.0.0",
         bind_port=5002,
-        application=CallHandler,
-        max_connections=50,
+        application=InboundCallHandler,
+        max_connections=10,
     )
 
+    # This blocks forever, handling connections
     server.listen()

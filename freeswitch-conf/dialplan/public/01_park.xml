@@ -3,7 +3,6 @@
   <extension name="park_store1">
     <condition field="${sip_refer_to}" expression="store1\.local"/>
     <condition field="destination_number" expression="^park\+(70[0-2])$">
-      <action application="answer"/>
       <action application="set" data="fifo_music=local_stream://moh"/>
       <action application="valet_park" data="store1 $1"/>
     </condition>
@@ -13,7 +12,6 @@
   <extension name="park_store2">
     <condition field="${sip_refer_to}" expression="store2\.local"/>
     <condition field="destination_number" expression="^park\+(70[0-2])$">
-      <action application="answer"/>
       <action application="set" data="fifo_music=local_stream://moh"/>
       <action application="valet_park" data="store2 $1"/>
     </condition>
