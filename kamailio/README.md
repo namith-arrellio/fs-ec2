@@ -1,177 +1,217 @@
-# Kamailio + FreeSWITCH Integration
+# Kamailio SIP Proxy
 
-This setup uses Kamailio as a SIP proxy in front of FreeSWITCH to handle:
-- **SIP Registration**: Phones register to Kamailio (port 5060)
-- **Presence/BLF**: Kamailio handles SUBSCRIBE/NOTIFY for BLF buttons
-- **Call Routing**: Kamailio forwards calls to FreeSWITCH for media handling
+## Architecture Overview
 
-## Architecture
+Kamailio serves as the central SIP signaling hub for the VoIP system:
 
 ```
-                                    ┌─────────────────┐
-                                    │   Telnyx PSTN   │
-                                    │  (Inbound DIDs) │
-                                    └────────┬────────┘
-                                             │ Port 5080
-                                             ▼
-┌───────────┐     Port 5060      ┌───────────────────┐     Port 5070      ┌─────────────────┐
-│  Yealink  │◄──────────────────►│     Kamailio      │◄──────────────────►│   FreeSWITCH    │
-│   Phones  │   REGISTER/INVITE  │  (SIP Proxy)      │   INVITE (media)   │ (Media Server)  │
-│           │   SUBSCRIBE/NOTIFY │                   │                    │                 │
-└───────────┘                    └─────────┬─────────┘                    └────────┬────────┘
-                                           │                                       │
-                                           │ SIP PUBLISH                           │
-                                           │ (presence)                            │
-                                           │                                       │
-                                           └───────────────┬───────────────────────┘
-                                                           │
-                                                           ▼
-                                              ┌─────────────────────────┐
-                                              │   ESL Call Router       │
-                                              │ (Inbound ESL + Outbound │
-                                              │  ESL + Presence Pub)    │
-                                              └─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         SYSTEM ARCHITECTURE                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Yealink Phones ─────► Kamailio (5060) ◄───── SIP Trunks (Telnyx)
+        ▲                     │ ▲                    
+        │                     │ │                    
+        │                     ▼ │                    
+        │               FreeSWITCH (5070)            
+        │               (Media/IVR/PBX)              
+        │                     │                      
+        └─────────────────────┘                      
 ```
 
-## Components
+### Components
 
-| Component | Port | Description |
-|-----------|------|-------------|
-| Kamailio | 5060 | SIP Proxy - handles phone registrations and presence |
-| FreeSWITCH Internal | 5070 | Media server - receives calls from Kamailio |
-| FreeSWITCH External | 5080 | Telnyx gateway connections |
-| MySQL | 3306 | Kamailio database for registrations/presence |
-| ESL Call Router | 5002 | Call routing + presence publishing (integrated) |
+| Component | Port | Role |
+|-----------|------|------|
+| **Kamailio** | 5060 | SIP registrar, proxy, trunk gateway |
+| **FreeSWITCH** | 5070 | Media server (IVR, voicemail, conferencing, parking) |
+| **MariaDB** | 3306 | User database, presence, dispatcher |
 
-## Deployment Steps
+### Kamailio Responsibilities
 
-### 1. Set Environment Variables
+1. **SIP Registration**: Phones register to Kamailio
+2. **Presence/BLF**: Handles SUBSCRIBE/PUBLISH for BLF
+3. **Trunk Gateway**: Entry point for SIP trunk connections
+4. **Routing**: Decides where to route each call
+5. **NAT Handling**: Manages NAT traversal for phones
+
+### FreeSWITCH Responsibilities
+
+1. **Media Handling**: RTP processing, codec transcoding
+2. **IVR/Auto-Attendant**: Interactive voice menus
+3. **Voicemail**: Message recording and retrieval
+4. **Conferencing**: Multi-party calls
+5. **Call Parking**: Valet parking with BLF
+6. **Call Recording**: Optional call recording
+
+## Call Flows
+
+### 1. Yealink Phone to Another Extension
+
+```
+Phone A                Kamailio                FreeSWITCH              Phone B
+   │                      │                        │                      │
+   │──INVITE (1001)──────►│                        │                      │
+   │                      │──INVITE──────────────►│                      │
+   │                      │  (X-Internal-Call)    │                      │
+   │                      │                        │──(processing)───────►│
+   │                      │◄──INVITE──────────────│                      │
+   │                      │  (to registered user) │                      │
+   │                      │───────────────────────────INVITE────────────►│
+   │◄─────────────────────────────────────────────────────180 Ringing────│
+   │◄─────────────────────────────────────────────────────200 OK─────────│
+   │──ACK────────────────────────────────────────────────────────────────►│
+   │◄═══════════════════════════RTP (via FreeSWITCH)═════════════════════►│
+```
+
+### 2. Outbound Call (Phone to External Number)
+
+```
+Phone                  Kamailio                FreeSWITCH              Telnyx
+   │                      │                        │                      │
+   │──INVITE──────────────►                        │                      │
+   │  (+15551234567)      │                        │                      │
+   │                      │──INVITE──────────────►│                      │
+   │                      │  (X-Outbound-Call)    │                      │
+   │                      │◄──INVITE──────────────│                      │
+   │                      │  (X-Route-To-Trunk)   │                      │
+   │                      │──────────────────────────INVITE─────────────►│
+   │◄─────────────────────────────────────────────────────180 Ringing────│
+   │◄─────────────────────────────────────────────────────200 OK─────────│
+   │◄═══════════════════════════════RTP══════════════════════════════════►│
+```
+
+### 3. Inbound Call from SIP Trunk
+
+```
+Telnyx                 Kamailio                FreeSWITCH              Phone
+   │                      │                        │                      │
+   │──INVITE──────────────►                        │                      │
+   │  (+17577828734)      │                        │                      │
+   │                      │──INVITE──────────────►│                      │
+   │                      │  (X-Inbound-Trunk)    │                      │
+   │                      │  (X-Store-Domain)     │──(IVR/Ring Group)───►│
+   │                      │                        │                      │
+   │                      │◄──INVITE──────────────│                      │
+   │                      │  (to registered user) │                      │
+   │                      │───────────────────────────INVITE────────────►│
+   │◄─────────────────────────────────────────────────────180 Ringing────│
+   │◄─────────────────────────────────────────────────────200 OK─────────│
+   │◄═══════════════════════════════RTP══════════════════════════════════►│
+```
+
+## Configuration
+
+### Custom Headers (Kamailio → FreeSWITCH)
+
+| Header | Description |
+|--------|-------------|
+| `X-Store-Domain` | The store domain (store1.local, store2.local) |
+| `X-Inbound-Trunk` | Set to "true" for calls from SIP trunk |
+| `X-Outbound-Call` | Set to "true" for outbound calls from phones |
+| `X-Internal-Call` | Set to "true" for extension-to-extension calls |
+| `X-Park-Call` | Set to "true" for park slot calls |
+| `X-Original-DID` | The original DID number for inbound calls |
+
+### Custom Headers (FreeSWITCH → Kamailio)
+
+| Header | Description |
+|--------|-------------|
+| `X-Route-To-Trunk` | Request Kamailio to route to SIP trunk |
+| `X-Store-Domain` | The store domain for caller ID selection |
+
+### DID to Store Mapping
+
+| DID | Store Domain | Description |
+|-----|--------------|-------------|
+| 7577828734 | store1.local | Store 1 |
+| 7372449688 | store2.local | Store 2 |
+
+### SIP Trunk Configuration
+
+Trunks are configured in the `dispatcher` table:
+
+```sql
+-- Dispatcher Group 1: Telnyx SIP Trunk
+INSERT INTO dispatcher (setid, destination, flags, priority, attrs, description) VALUES
+(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=50', 'Telnyx Primary'),
+(1, 'sip:sip2.telnyx.com:5060', 0, 1, 'weight=50', 'Telnyx Secondary');
+```
+
+## User Management
+
+### Add a new SIP user
 
 ```bash
-# Set your public IP (for NAT traversal)
-export ADVERTISED_IP=your.public.ip
-
-# Or create a .env file
-echo "ADVERTISED_IP=your.public.ip" > .env
+docker exec -it kamailio /usr/local/bin/add_user.sh 1000 password123 store1.local
 ```
 
-### 2. Build and Start Services
+### Initialize default users
 
 ```bash
-# Build all containers
-docker-compose build
-
-# Start MySQL first
-docker-compose up -d mysql
-
-# Wait for MySQL to be healthy (check logs)
-docker-compose logs -f mysql
-# Look for "ready for connections"
-
-# Start remaining services
-docker-compose up -d
+docker exec -it kamailio /usr/local/bin/init_users.sh
 ```
 
-### 3. Initialize Users
-
-After Kamailio starts and initializes the database:
+### List registered users
 
 ```bash
-# Add default users
-docker exec kamailio /usr/local/bin/init_users.sh
-
-# Or add individual users
-docker exec kamailio /usr/local/bin/add_user.sh 1000 1234 store1.local
+docker exec -it kamailio kamctl ul show
 ```
-
-### 4. Verify Services
-
-```bash
-# Check all services
-docker-compose ps
-
-# Check Kamailio
-docker exec kamailio kamcmd ul.dump
-
-# Check FreeSWITCH
-docker exec freeswitch-dev fs_cli -x "sofia status"
-```
-
-### 5. Configure Phones
-
-Point your SIP phones to:
-- **SIP Server**: `<your-server-ip>` (port 5060)
-- **Domain**: `store1.local` or `store2.local`
-- **Username**: Extension number (e.g., `1000`)
-- **Password**: `1234`
-
-**BLF Buttons:**
-- **Type**: BLF
-- **Value**: `700` (for park slot 700)
-- **Line**: 1
-
-## How BLF Works
-
-1. Phone sends `SUBSCRIBE sip:700@store1.local` to Kamailio
-2. Kamailio stores the subscription
-3. When a call is parked in slot 700:
-   - FreeSWITCH fires a valet_park event via ESL
-   - ESL Call Router receives the event
-   - ESL Call Router sends `PUBLISH sip:700@store1.local` to Kamailio
-   - Kamailio sends `NOTIFY` to all subscribed phones
-   - Phone BLF light turns red/blinking
 
 ## Troubleshooting
 
-### Check Kamailio registrations
+### Check Kamailio status
+
 ```bash
-docker exec kamailio kamcmd ul.dump
+docker exec -it kamailio kamctl stats
 ```
 
-### Check Kamailio presence
+### View SIP traffic
+
 ```bash
-docker exec kamailio kamcmd pres.phtable_list
+docker exec -it kamailio sngrep
 ```
 
-### Check FreeSWITCH
+### Check dispatcher status
+
 ```bash
-docker exec freeswitch-dev fs_cli -x "sofia status"
-docker exec freeswitch-dev fs_cli -x "valet_info"
+docker exec -it kamailio kamctl dispatcher show
+```
+
+### Reload dispatcher
+
+```bash
+docker exec -it kamailio kamctl dispatcher reload
 ```
 
 ### View logs
+
 ```bash
-docker-compose logs -f kamailio
-docker-compose logs -f esl
-docker-compose logs -f freeswitch
+docker logs -f kamailio
 ```
 
-### SIP trace
-```bash
-# FreeSWITCH
-docker exec -it freeswitch-dev fs_cli
-> sofia global siptrace on
+## Database Tables
 
-# Kamailio (increase debug level)
-docker exec kamailio kamcmd corex.debug 2
-```
+| Table | Purpose |
+|-------|---------|
+| `subscriber` | SIP user accounts |
+| `location` | Active registrations |
+| `domain` | SIP domains |
+| `dispatcher` | SIP trunk endpoints |
+| `dialog` | Active call dialogs |
+| `presentity` | Presence state |
+| `active_watchers` | Presence subscriptions |
 
-## Files
+## Security
 
-- `kamailio.cfg` - Main Kamailio configuration
-- `entrypoint.sh` - Kamailio startup script (creates database)
-- `init_users.sh` - Script to add default users
-- `add_user.sh` - Script to add individual users
-- `../esl/call_router.py` - Call routing + presence publishing (integrated)
+- Pike module for flood detection
+- IP-based blocking for repeat offenders
+- User-agent filtering for known scanners
+- ACL-based trunk authentication
+- Credential-based phone authentication
 
-## Port Reference
+## Environment Variables
 
-| Service | Port | Protocol | Purpose |
-|---------|------|----------|---------|
-| Kamailio | 5060 | UDP/TCP | Phone registration, presence |
-| FreeSWITCH Internal | 5070 | UDP | Calls from Kamailio |
-| FreeSWITCH External | 5080 | UDP | Telnyx gateway |
-| FreeSWITCH ESL | 8021 | TCP | Event Socket (internal) |
-| ESL Router | 5002 | TCP | Outbound ESL for call routing |
-| MySQL | 3306 | TCP | Kamailio database |
-| RTP | 10000-20000 | UDP | Media streams |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ADVERTISED_IP` | Public IP for SIP/SDP | Auto-detected |

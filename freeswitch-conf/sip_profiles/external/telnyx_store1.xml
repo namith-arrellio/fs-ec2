@@ -1,16 +1,27 @@
 <include>
+  <!--
+    TELNYX STORE 1 GATEWAY - DISABLED
+    
+    With the new architecture, Kamailio handles SIP trunk connections.
+    FreeSWITCH no longer registers directly with Telnyx.
+    
+    Call flow:
+    - Inbound: Telnyx -> Kamailio -> FreeSWITCH -> Kamailio -> Phone
+    - Outbound: Phone -> Kamailio -> FreeSWITCH -> Kamailio -> Telnyx
+    
+    Keeping this file for reference/rollback purposes.
+    To re-enable direct trunk, set register=true.
+  -->
   <gateway name="telnyx_store1">
     <param name="username" value="testarrellio"/>
     <param name="password" value="12345678"/>
     <param name="realm" value="sip.telnyx.com"/>
     <param name="proxy" value="sip.telnyx.com"/>
-    <param name="register" value="true"/>
+    <!-- DISABLED: Kamailio handles trunk registration now -->
+    <param name="register" value="false"/>
     <param name="caller-id-in-from" value="true"/>
     <param name="expire-seconds" value="120"/>
     <param name="retry-seconds" value="30"/>
-    <param name="ping" value="25"/>
-    <param name="ping-max" value="3"/>
-    <param name="ping-min" value="1"/>
+    <param name="ping" value="0"/>
   </gateway>
 </include>
-

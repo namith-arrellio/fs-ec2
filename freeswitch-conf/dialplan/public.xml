@@ -1,113 +1,180 @@
 <!--
-    NOTICE:
-
-    This context is usually accessed via the external sip profile listening on port 5080.
+    PUBLIC DIALPLAN - All calls from Kamailio enter here
     
-    It is recommended to have separate inbound and outbound contexts.  Not only for security
-    but clearing up why you would need to do such a thing.  You don't want outside un-authenticated
-    callers hitting your default context which allows dialing calls thru your providers and results 
-    in Toll Fraud.
+    Architecture:
+    - Kamailio is the SIP entry point for phones and trunks
+    - FreeSWITCH is the media server for IVR, voicemail, conferencing, etc.
+    - All calls route back to Kamailio for final delivery
+    
+    Kamailio Headers:
+    - X-Store-Domain: The store domain (store1.local, store2.local)
+    - X-Inbound-Trunk: "true" for calls from SIP trunk
+    - X-Outbound-Call: "true" for outbound calls from phones
+    - X-Internal-Call: "true" for extension-to-extension calls
+    - X-Park-Call: "true" for park slot calls
+    - X-Original-DID: The original DID number for inbound calls
 -->
 
-<!-- http://wiki.freeswitch.org/wiki/Dialplan_XML -->
 <include>
   <context name="public">
 
     <extension name="unloop">
       <condition field="${unroll_loops}" expression="^true$"/>
       <condition field="${sip_looped_call}" expression="^true$">
-	<action application="deflect" data="${destination_number}"/>
+        <action application="deflect" data="${destination_number}"/>
       </condition>
     </extension>
-    <!--
-	Tag anything pass thru here as an outside_call so you can make sure not
-	to create any routing loops based on the conditions that it came from 
-	the outside of the switch.  
-    -->
-    <extension name="outside_call" continue="true">
+
+    <!-- Tag all calls from Kamailio -->
+    <extension name="from_kamailio" continue="true">
       <condition>
-	<action application="set" data="outside_call=true"/>
-	<action application="export" data="RFC2822_DATE=${strftime(%a, %d %b %Y %T %z)}"/>
+        <action application="set" data="from_kamailio=true"/>
+        <action application="set" data="store_domain=${sip_h_X-Store-Domain}"/>
+        <action application="export" data="RFC2822_DATE=${strftime(%a, %d %b %Y %T %z)}"/>
       </condition>
     </extension>
 
     <extension name="call_debug" continue="true">
       <condition field="${call_debug}" expression="^true$" break="never">
-	<action application="info"/>
+        <action application="info"/>
       </condition>
     </extension>
 
-    <!-- Outbound calls from Store 1 users via Kamailio -->
-    <extension name="outbound_store1">
-      <condition field="${sip_from_host}" expression="store1\.local"/>
-      <condition field="destination_number" expression="^(\+?1?\d{10})$">
-        <action application="set" data="effective_caller_id_number=+17577828734"/>
-        <action application="set" data="effective_caller_id_name=Store 1"/>
-        <action application="bridge" data="sofia/gateway/telnyx_store1/+1$1"/>
+    <!-- ============================================================ -->
+    <!-- INBOUND CALLS FROM SIP TRUNK (via Kamailio)                  -->
+    <!-- ============================================================ -->
+    
+    <!-- Store 1 Inbound - +17577828734 -->
+    <extension name="store1_inbound">
+      <condition field="${sip_h_X-Inbound-Trunk}" expression="^true$"/>
+      <condition field="${sip_h_X-Store-Domain}" expression="^store1\.local$">
+        <action application="log" data="INFO [INBOUND] Store 1 DID call, routing to ESL"/>
+        <action application="set" data="domain_name=store1.local"/>
+        <action application="set" data="sip_invite_domain=store1.local"/>
+        <action application="socket" data="127.0.0.1:5002 async full"/>
       </condition>
     </extension>
 
-    <!-- Outbound calls from Store 2 users via Kamailio -->
-    <extension name="outbound_store2">
-      <condition field="${sip_from_host}" expression="store2\.local"/>
-      <condition field="destination_number" expression="^(\+?1?\d{10})$">
-        <action application="set" data="effective_caller_id_number=+17372449688"/>
-        <action application="set" data="effective_caller_id_name=Store 2"/>
-        <action application="bridge" data="sofia/gateway/telnyx_store2/+1$1"/>
+    <!-- Store 2 Inbound - +17372449688 -->
+    <extension name="store2_inbound">
+      <condition field="${sip_h_X-Inbound-Trunk}" expression="^true$"/>
+      <condition field="${sip_h_X-Store-Domain}" expression="^store2\.local$">
+        <action application="log" data="INFO [INBOUND] Store 2 DID call, routing to ESL"/>
+        <action application="set" data="domain_name=store2.local"/>
+        <action application="set" data="sip_invite_domain=store2.local"/>
+        <action application="socket" data="127.0.0.1:5002 async full"/>
       </condition>
     </extension>
 
-    <!-- Internal extension dialing from Kamailio - route back through Kamailio -->
-    <extension name="internal_via_kamailio">
-      <condition field="${sip_from_host}" expression="store[12]\.local"/>
+    <!-- ============================================================ -->
+    <!-- OUTBOUND CALLS (from phones, route back to Kamailio)         -->
+    <!-- ============================================================ -->
+    
+    <!-- Outbound calls - route back to Kamailio with trunk routing header -->
+    <extension name="outbound_via_kamailio">
+      <condition field="${sip_h_X-Outbound-Call}" expression="^true$"/>
+      <condition field="destination_number" expression="^(\+?1?[0-9]{10,})$">
+        <action application="log" data="INFO [OUTBOUND] Routing ${destination_number} via Kamailio trunk"/>
+        <action application="set" data="effective_caller_id_number=${store_domain}"/>
+        
+        <!-- Set caller ID based on store -->
+        <action application="set" data="outbound_caller_id=${cond(${store_domain} == store1.local ? +17577828734 : +17372449688)}"/>
+        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
+        
+        <!-- Format number for E.164 -->
+        <action application="set" data="outbound_number=$1"/>
+        
+        <!-- Route back to Kamailio with trunk routing header -->
+        <action application="export" data="sip_h_X-Route-To-Trunk=true"/>
+        <action application="export" data="sip_h_X-Store-Domain=${store_domain}"/>
+        <action application="bridge" data="{sip_h_X-Route-To-Trunk=true,sip_h_X-Store-Domain=${store_domain}}sofia/internal/${outbound_number}@10.0.0.135:5060"/>
+      </condition>
+    </extension>
+
+    <!-- ============================================================ -->
+    <!-- INTERNAL EXTENSION CALLS                                     -->
+    <!-- ============================================================ -->
+    
+    <!-- Internal extension dialing - route back through Kamailio -->
+    <extension name="internal_extension">
+      <condition field="${sip_h_X-Internal-Call}" expression="^true$"/>
       <condition field="destination_number" expression="^(10[01][0-9])$">
-        <action application="set" data="sip_invite_domain=${sip_from_host}"/>
+        <action application="log" data="INFO [INTERNAL] Extension $1 via Kamailio"/>
+        <action application="set" data="sip_invite_domain=${store_domain}"/>
+        <!-- Route back to Kamailio for location lookup -->
         <action application="bridge" data="sofia/internal/$1@10.0.0.135:5060"/>
       </condition>
     </extension>
 
-    <!-- Park slots from Kamailio -->
-    <extension name="park_via_kamailio">
-      <condition field="${sip_from_host}" expression="(store[12]\.local)"/>
+    <!-- ============================================================ -->
+    <!-- PARKING                                                      -->
+    <!-- ============================================================ -->
+    
+    <!-- Park slots -->
+    <extension name="park_call">
+      <condition field="${sip_h_X-Park-Call}" expression="^true$"/>
       <condition field="destination_number" expression="^(70[0-9])$">
+        <action application="log" data="INFO [PARK] Slot $1 for ${store_domain}"/>
         <action application="answer"/>
-        <action application="set" data="presence_id=$1@$2"/>
-        <action application="valet_park" data="$2 $1"/>
+        <action application="set" data="presence_id=$1@${store_domain}"/>
+        <action application="valet_park" data="${store_domain} $1"/>
       </condition>
     </extension>
 
+    <!-- ============================================================ -->
+    <!-- FEATURE CODES                                                -->
+    <!-- ============================================================ -->
+    
+    <!-- Blind transfer -->
+    <extension name="feature_blind_transfer">
+      <condition field="destination_number" expression="^\*1(\d+)$">
+        <action application="bridge" data="sofia/internal/$1@10.0.0.135:5060"/>
+      </condition>
+    </extension>
+    
+    <!-- Attended transfer -->
+    <extension name="feature_att_transfer">
+      <condition field="destination_number" expression="^\*2(\d+)$">
+        <action application="set" data="ringback=${us-ring}"/>
+        <action application="att_xfer" data="sofia/internal/$1@10.0.0.135:5060"/>
+      </condition>
+    </extension>
+    
+    <!-- Voicemail access -->
+    <extension name="feature_voicemail">
+      <condition field="destination_number" expression="^\*98$">
+        <action application="answer"/>
+        <action application="voicemail" data="check default ${store_domain} ${caller_id_number}"/>
+      </condition>
+    </extension>
+    
+    <!-- Echo test -->
+    <extension name="feature_echo">
+      <condition field="destination_number" expression="^\*9196$">
+        <action application="answer"/>
+        <action application="echo"/>
+      </condition>
+    </extension>
+
+    <!-- ============================================================ -->
+    <!-- LEGACY/FALLBACK ROUTES                                       -->
+    <!-- ============================================================ -->
+
+    <!-- Legacy: Direct extension transfers to default context -->
     <extension name="public_extensions">
       <condition field="destination_number" expression="^(10[01][0-9])$">
-	<action application="transfer" data="$1 XML default"/>
+        <action application="transfer" data="$1 XML default"/>
       </condition>
     </extension>
 
     <extension name="public_conference_extensions">
       <condition field="destination_number" expression="^(3[5-8][01][0-9])$">
-	<action application="transfer" data="$1 XML default"/>
+        <action application="transfer" data="$1 XML default"/>
       </condition>
     </extension>
     
-    <!--
-	You can place files in the public directory to get included.
-    -->
+    <!-- Include additional public extensions -->
     <X-PRE-PROCESS cmd="include" data="public/*.xml"/>
-    <!--
-	If you have made it this far lets challenge the caller and if they authenticate
-	lets try what they dialed in the default context. (commented out by default)
-    -->
-    <!--
-    <extension name="check_auth" continue="true">
-      <condition field="${sip_authorized}" expression="^true$" break="never">
-	<anti-action application="respond" data="407"/>
-      </condition>
-    </extension>
-    
-    <extension name="transfer_to_default">
-      <condition>
-	<action application="transfer" data="${destination_number} XML default"/>
-      </condition>
-    </extension>
-    -->
+
   </context>
 </include>

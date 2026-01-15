@@ -13,13 +13,34 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # =============================================================================
+# ARCHITECTURE OVERVIEW
+# =============================================================================
+#
+# Call Flow with Kamailio as SIP Proxy:
+#
+# INBOUND (from SIP Trunk):
+#   Trunk -> Kamailio -> FreeSWITCH (this ESL) -> Kamailio -> Phone
+#
+# OUTBOUND (from Phone):
+#   Phone -> Kamailio -> FreeSWITCH (dialplan) -> Kamailio -> Trunk
+#
+# INTERNAL (Extension to Extension):
+#   Phone -> Kamailio -> FreeSWITCH -> Kamailio -> Phone
+#
+# Kamailio adds these headers:
+#   - X-Store-Domain: store1.local or store2.local
+#   - X-Inbound-Trunk: "true" for calls from SIP trunk
+#   - X-Original-DID: The DID number for inbound calls
+#
+# =============================================================================
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 
 STORES = {
     "store1.local": {
         "did": "7577828734",
-        "gateway": "telnyx_store1",
         "caller_id": "+17577828734",
         "context": "store1",
         "extensions": ["1000", "1001"],
@@ -28,7 +49,6 @@ STORES = {
     },
     "store2.local": {
         "did": "7372449688",
-        "gateway": "telnyx_store2",
         "caller_id": "+17372449688",
         "context": "store2",
         "extensions": ["1000", "1001"],
@@ -37,8 +57,9 @@ STORES = {
     },
 }
 
-# Kamailio configuration for presence publishing
-KAMAILIO_HOST = "127.0.0.1"
+# Kamailio configuration - all calls route through Kamailio
+# Must use actual IP since services bind to local_ip_v4, not 127.0.0.1
+KAMAILIO_HOST = "10.0.0.135"
 KAMAILIO_PORT = 5060
 
 # FreeSWITCH ESL configuration (for Inbound ESL)
@@ -276,42 +297,56 @@ def run_inbound_esl():
 
 
 # =============================================================================
-# OUTBOUND ESL CALL HANDLER (existing call routing logic)
+# ROUTING LOGIC
 # =============================================================================
 
 
-def get_route_from_backend(called_number, caller_id):
-    """Hardcoded routing logic - route through Kamailio"""
-    normalized = (
-        called_number.replace("+1", "")
-        .replace("-", "")
-        .replace(" ", "")
-        .replace("+", "")
-    )
+def get_route_for_inbound_call(store_domain, caller_id):
+    """
+    Get routing decision for an inbound call from SIP trunk (via Kamailio).
 
-    # Kamailio address for routing to registered phones
-    KAMAILIO_ADDR = "127.0.0.1:5060"
+    In the new architecture:
+    - Calls come from Kamailio with X-Store-Domain header
+    - We route to the ring group for that store
+    - Calls go back to Kamailio for delivery to phones
+    """
+    if store_domain not in STORES:
+        logger.warning(f"Unknown store domain: {store_domain}")
+        return {"action": "reject", "reason": f"Unknown store: {store_domain}"}
 
-    for domain, config in STORES.items():
-        if normalized == config["did"] or called_number == f"1{config['did']}":
-            logger.info(f"Routing call to {domain}: {called_number}")
-            # Route through Kamailio to reach registered phones
-            return {
-                "action": "bridge",
-                "targets": [
-                    f"sofia/internal/{ext}@{KAMAILIO_ADDR}"
-                    for ext in config["ring_group"]
-                ],
-                "context": config["context"],
-                "domain": domain,
-                "sip_invite_domain": domain,  # Tell FreeSWITCH which domain this is for
-            }
+    config = STORES[store_domain]
 
-    return {"action": "reject", "reason": "No route found for " + called_number}
+    # Build bridge targets - route through Kamailio
+    # Kamailio will do location lookup and deliver to phones
+    targets = [
+        f"sofia/internal/{ext}@{KAMAILIO_HOST}:{KAMAILIO_PORT}"
+        for ext in config["ring_group"]
+    ]
+
+    logger.info(f"Routing inbound call for {store_domain}: {targets}")
+
+    return {
+        "action": "bridge",
+        "targets": targets,
+        "context": config["context"],
+        "domain": store_domain,
+        "sip_invite_domain": store_domain,
+    }
+
+
+# =============================================================================
+# OUTBOUND ESL CALL HANDLER
+# =============================================================================
 
 
 class InboundCallHandler(object):
-    """Handle inbound calls from FreeSWITCH via Outbound ESL"""
+    """
+    Handle inbound calls from FreeSWITCH via Outbound ESL.
+
+    In the new architecture, this handles calls that come from Kamailio
+    (from SIP trunk) and routes them to the appropriate ring group,
+    sending the call back through Kamailio to reach registered phones.
+    """
 
     def __init__(self, session):
         self.session = session
@@ -339,16 +374,49 @@ class InboundCallHandler(object):
         called_number = self.session.session_data.get("Caller-Destination-Number")
         caller_id = self.session.session_data.get("Caller-Caller-ID-Number")
         uuid = self.session.session_data.get("Unique-ID")
-        profile = self.session.session_data.get("variable_sip_profile_name", "")
+
+        # Get Kamailio headers (new architecture)
+        store_domain = self.session.session_data.get(
+            "variable_sip_h_X-Store-Domain", ""
+        )
+        is_inbound_trunk = self.session.session_data.get(
+            "variable_sip_h_X-Inbound-Trunk", ""
+        )
+        original_did = self.session.session_data.get(
+            "variable_sip_h_X-Original-DID", ""
+        )
+
+        # Also check channel variables set by dialplan
+        if not store_domain:
+            store_domain = self.session.session_data.get("variable_domain_name", "")
+        if not store_domain:
+            store_domain = self.session.session_data.get(
+                "variable_sip_invite_domain", ""
+            )
 
         logger.info(f"📞 Inbound call: {caller_id} -> {called_number} (UUID: {uuid})")
+        logger.info(
+            f"   Store Domain: {store_domain}, Inbound Trunk: {is_inbound_trunk}"
+        )
+        logger.info(f"   Original DID: {original_did}")
+
+        # If no store domain from headers, try to determine from DID
+        if not store_domain and called_number:
+            store_domain = self._get_store_from_did(called_number)
+            logger.info(f"   Determined store from DID: {store_domain}")
+
+        if not store_domain:
+            logger.error("Cannot determine store domain, rejecting call")
+            self.session.hangup("CALL_REJECTED")
+            self.session.stop()
+            return
 
         # Get routing decision
-        route = get_route_from_backend(called_number, caller_id)
+        route = get_route_for_inbound_call(store_domain, caller_id)
         logger.info(f"Routing decision: {route['action']}")
 
         if route["action"] == "bridge":
-            # Set channel variables using call_command instead of setVariable
+            # Set channel variables
             self.session.call_command("set", f"domain_name={route['domain']}")
             self.session.call_command(
                 "set",
@@ -365,7 +433,7 @@ class InboundCallHandler(object):
 
             targets = ",".join(route["targets"])
             bridge_string = f"{{leg_timeout=30,ignore_early_media=true,sip_invite_domain={route['domain']}}}{targets}"
-            logger.info(f"Bridging to: {targets}")
+            logger.info(f"Bridging to (via Kamailio): {targets}")
 
             self.session.bridge(bridge_string, block=False)
             logger.info("✓ Bridge command sent")
@@ -377,6 +445,21 @@ class InboundCallHandler(object):
         # Close the socket
         self.session.stop()
 
+    def _get_store_from_did(self, did):
+        """Determine store domain from DID number"""
+        # Normalize DID
+        normalized = (
+            did.replace("+1", "").replace("-", "").replace(" ", "").replace("+", "")
+        )
+        if normalized.startswith("1") and len(normalized) == 11:
+            normalized = normalized[1:]
+
+        for domain, config in STORES.items():
+            if normalized == config["did"]:
+                return domain
+
+        return None
+
 
 # =============================================================================
 # MAIN - Run both Outbound ESL Server and Inbound ESL Client
@@ -386,6 +469,11 @@ if __name__ == "__main__":
     logger.info("=" * 60)
     logger.info("Starting ESL Service (Call Router + Presence Publisher)")
     logger.info("=" * 60)
+    logger.info("")
+    logger.info("Architecture: Kamailio -> FreeSWITCH -> Kamailio")
+    logger.info(f"  Kamailio: {KAMAILIO_HOST}:{KAMAILIO_PORT}")
+    logger.info(f"  FreeSWITCH ESL: {FREESWITCH_HOST}:{FREESWITCH_ESL_PORT}")
+    logger.info("")
 
     # Start Inbound ESL client for presence events (in background greenlet)
     logger.info("🚀 Starting Inbound ESL client for presence events...")

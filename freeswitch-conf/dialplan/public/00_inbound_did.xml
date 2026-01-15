@@ -1,16 +1,32 @@
 <include>
-  <!-- Store 1 Inbound - +17577828734 -->
-  <extension name="store1_inbound">
+  <!--
+    LEGACY INBOUND DID HANDLING
+    
+    NOTE: With the new architecture, inbound DID calls come through Kamailio
+    which adds X-Inbound-Trunk and X-Store-Domain headers. The routing is
+    handled in public.xml based on these headers.
+    
+    These extensions are kept as fallback for any direct trunk connections.
+  -->
+
+  <!-- Fallback: Store 1 Inbound - +17577828734 (direct to FS, not via Kamailio) -->
+  <extension name="store1_inbound_legacy">
+    <condition field="${sip_h_X-Inbound-Trunk}" expression="^$"/>
     <condition field="destination_number" expression="^(\+?1?)?7577828734$|^17577828734$">
-      <action application="log" data="INFO [PYTHON-ROUTE] Matched store1_inbound: ${destination_number}, connecting to socket"/>
+      <action application="log" data="INFO [LEGACY-ROUTE] Direct Store1 inbound: ${destination_number}"/>
+      <action application="set" data="domain_name=store1.local"/>
+      <action application="set" data="sip_invite_domain=store1.local"/>
       <action application="socket" data="127.0.0.1:5002 async full"/>
     </condition>
   </extension>
 
-  <!-- Store 2 Inbound - +17372449688 -->
-  <extension name="store2_inbound">
+  <!-- Fallback: Store 2 Inbound - +17372449688 (direct to FS, not via Kamailio) -->
+  <extension name="store2_inbound_legacy">
+    <condition field="${sip_h_X-Inbound-Trunk}" expression="^$"/>
     <condition field="destination_number" expression="^(\+?1?)?7372449688$|^17372449688$">
-      <action application="log" data="INFO [PYTHON-ROUTE] Matched store2_inbound: ${destination_number}, connecting to socket"/>
+      <action application="log" data="INFO [LEGACY-ROUTE] Direct Store2 inbound: ${destination_number}"/>
+      <action application="set" data="domain_name=store2.local"/>
+      <action application="set" data="sip_invite_domain=store2.local"/>
       <action application="socket" data="127.0.0.1:5002 async full"/>
     </condition>
   </extension>

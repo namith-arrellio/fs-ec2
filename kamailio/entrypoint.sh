@@ -40,9 +40,27 @@ EOF
     echo "Creating domains..."
     mysql -h 127.0.0.1 -u root -proot kamailio -e "INSERT IGNORE INTO domain (domain) VALUES ('store1.local'), ('store2.local');"
 
+    # Create dispatcher entries for SIP trunks
+    echo "Creating dispatcher entries for SIP trunks..."
+    mysql -h 127.0.0.1 -u root -proot kamailio <<EOF
+-- Dispatcher Group 1: Telnyx SIP Trunk
+-- Telnyx provides multiple SIP endpoints for redundancy
+INSERT IGNORE INTO dispatcher (setid, destination, flags, priority, attrs, description) VALUES
+(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=50', 'Telnyx Primary'),
+(1, 'sip:sip2.telnyx.com:5060', 0, 1, 'weight=50', 'Telnyx Secondary');
+EOF
+
     echo "Database initialized successfully!"
 else
     echo "Database already initialized (found $TABLES_EXIST tables)."
+    
+    # Ensure dispatcher entries exist (idempotent)
+    echo "Ensuring dispatcher entries exist..."
+    mysql -h 127.0.0.1 -u root -proot kamailio <<EOF
+INSERT IGNORE INTO dispatcher (setid, destination, flags, priority, attrs, description) VALUES
+(1, 'sip:sip.telnyx.com:5060', 0, 0, 'weight=50', 'Telnyx Primary'),
+(1, 'sip:sip2.telnyx.com:5060', 0, 1, 'weight=50', 'Telnyx Secondary');
+EOF
 fi
 
 # Replace advertised IP in config
