@@ -133,7 +133,7 @@ def generate_sofia_conf_xml():
           <aliases></aliases>
           <gateways></gateways>
           <domains>
-            <domain name="all" alias="true" parse="true"/>
+            <domain name="all" alias="true" parse="false"/>
           </domains>
           <settings>
             <param name="context" value="public"/>
@@ -162,9 +162,7 @@ def generate_sofia_conf_xml():
             <param name="rtp-timeout-sec" value="300"/>
             <param name="rtp-hold-timeout-sec" value="1800"/>
             <param name="manage-presence" value="true"/>
-            <param name="presence-probe-on-register" value="true"/>
             <param name="presence-hosts" value="{all_presence_hosts}"/>
-            <param name="presence-privacy" value="false"/>
             <param name="inbound-late-negotiation" value="true"/>
             <param name="tls" value="false"/>
             <param name="ws-binding" value=":5066"/>
