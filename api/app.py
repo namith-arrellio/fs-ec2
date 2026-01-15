@@ -288,11 +288,22 @@ def generate_park_slot_xml(domain, slot_id):
 
 def generate_dialplan_xml(context, store_data=None, store_domain=None):
     """Dialplan with dynamic park slots + ESL routing"""
+    lot_name = store_domain or context
+
+    park_regex = "|".join(store_data["park_slots"])
+    print(f"PARK_REGEX: {park_regex}")
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <document type="freeswitch/xml">
   <section name="dialplan">
     <context name="{context}">
+      <extension name="park_slot">
+        <condition field="destination_number" expression="^({park_regex})$">
+          <action application="set" data="fifo_music=local_stream://moh"/>
+          <action application="set" data="presence_id=$1@{lot_name}"/>
+          <action application="valet_park" data="{lot_name} $1"/>
+        </condition>
+      </extension>
       <extension name="esl_routing">
         <condition field="destination_number" expression="^(.*)$">
           <action application="socket" data="{ESL_HOST}:{ESL_PORT} async full"/>
