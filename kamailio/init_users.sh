@@ -2,9 +2,12 @@
 # Initialize default users in Kamailio
 # Run this after database is initialized
 
+set -e
+
 # Wait for MySQL
-while ! mysql -h 127.0.0.1 -u kamailio -pkamailiorw -e "SELECT 1" &> /dev/null; do
-    echo "Waiting for MySQL..."
+echo "Waiting for MySQL..."
+until mysql -h 127.0.0.1 -u kamailio -pkamailiorw -e "SELECT 1" > /dev/null 2>&1; do
+    echo "MySQL is unavailable - sleeping"
     sleep 2
 done
 
@@ -39,4 +42,3 @@ EOF
 done
 
 echo "User initialization complete!"
-

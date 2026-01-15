@@ -2,6 +2,8 @@
 # Add a user to Kamailio
 # Usage: ./add_user.sh <username> <password> <domain>
 
+set -e
+
 if [ $# -lt 3 ]; then
     echo "Usage: $0 <username> <password> <domain>"
     echo "Example: $0 1000 1234 store1.local"
@@ -27,4 +29,3 @@ INSERT INTO subscriber (username, domain, password, ha1, ha1b) VALUES (
 EOF
 
 echo "User $USERNAME@$DOMAIN added/updated."
-
