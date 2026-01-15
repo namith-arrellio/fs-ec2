@@ -37,6 +37,45 @@
       </condition>
     </extension>
 
+    <!-- Outbound calls from Store 1 users via Kamailio -->
+    <extension name="outbound_store1">
+      <condition field="${sip_from_host}" expression="store1\.local"/>
+      <condition field="destination_number" expression="^(\+?1?\d{10})$">
+        <action application="set" data="effective_caller_id_number=+17577828734"/>
+        <action application="set" data="effective_caller_id_name=Store 1"/>
+        <action application="bridge" data="sofia/gateway/telnyx_store1/+1$1"/>
+      </condition>
+    </extension>
+
+    <!-- Outbound calls from Store 2 users via Kamailio -->
+    <extension name="outbound_store2">
+      <condition field="${sip_from_host}" expression="store2\.local"/>
+      <condition field="destination_number" expression="^(\+?1?\d{10})$">
+        <action application="set" data="effective_caller_id_number=+17372449688"/>
+        <action application="set" data="effective_caller_id_name=Store 2"/>
+        <action application="bridge" data="sofia/gateway/telnyx_store2/+1$1"/>
+      </condition>
+    </extension>
+
+    <!-- Internal extension dialing from Kamailio - route back through Kamailio -->
+    <extension name="internal_via_kamailio">
+      <condition field="${sip_from_host}" expression="store[12]\.local"/>
+      <condition field="destination_number" expression="^(10[01][0-9])$">
+        <action application="set" data="sip_invite_domain=${sip_from_host}"/>
+        <action application="bridge" data="sofia/internal/$1@10.0.0.135:5060"/>
+      </condition>
+    </extension>
+
+    <!-- Park slots from Kamailio -->
+    <extension name="park_via_kamailio">
+      <condition field="${sip_from_host}" expression="(store[12]\.local)"/>
+      <condition field="destination_number" expression="^(70[0-9])$">
+        <action application="answer"/>
+        <action application="set" data="presence_id=$1@$2"/>
+        <action application="valet_park" data="$2 $1"/>
+      </condition>
+    </extension>
+
     <extension name="public_extensions">
       <condition field="destination_number" expression="^(10[01][0-9])$">
 	<action application="transfer" data="$1 XML default"/>
