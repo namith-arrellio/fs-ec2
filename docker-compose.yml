@@ -6,7 +6,7 @@ services:
     network_mode: "host"
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: kamailio
+      # Don't auto-create database - let kamdbctl do it
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
