@@ -1,0 +1,17 @@
+<include>
+  <!-- Store 1 Inbound - +17577828734 -->
+  <extension name="store1_inbound">
+    <condition field="destination_number" expression="^(\+?1?)?7577828734$|^17577828734$">
+      <action application="log" data="INFO [PYTHON-ROUTE] Matched store1_inbound: ${destination_number}, connecting to socket"/>
+      <action application="socket" data="127.0.0.1:5002 async full"/>
+    </condition>
+  </extension>
+
+  <!-- Store 2 Inbound - +17372449688 -->
+  <extension name="store2_inbound">
+    <condition field="destination_number" expression="^(\+?1?)?7372449688$|^17372449688$">
+      <action application="log" data="INFO [PYTHON-ROUTE] Matched store2_inbound: ${destination_number}, connecting to socket"/>
+      <action application="socket" data="127.0.0.1:5002 async full"/>
+    </condition>
+  </extension>
+</include>
