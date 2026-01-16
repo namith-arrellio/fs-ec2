@@ -22,8 +22,8 @@
       profiles in the sip_profiles directory that is up
       one level from this directory.
   -->
-  <profiles>
+  <!-- <profiles>
     <X-PRE-PROCESS cmd="include" data="../sip_profiles/*.xml"/>
-  </profiles>
+  </profiles> -->
 
 </configuration>
